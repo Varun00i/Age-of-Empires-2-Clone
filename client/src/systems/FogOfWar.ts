@@ -40,7 +40,16 @@ export class FogOfWar {
     this.updateTimer += dt;
     if (this.updateTimer < this.UPDATE_INTERVAL) return;
     this.updateTimer = 0;
+    this.computeVisibility();
+  }
 
+  /** Run a full visibility pass immediately (skip throttle timer). */
+  forceUpdate(): void {
+    this.updateTimer = 0;
+    this.computeVisibility();
+  }
+
+  private computeVisibility(): void {
     const em = this.game.entityManager;
 
     // Clear current visibility (keep explored)

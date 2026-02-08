@@ -87,6 +87,7 @@ export class Game {
     this.input.init();
     this.audioManager.init();
     this.menuManager.init();
+    this.networkClient.init();
   }
 
   startGame(options: {
@@ -200,6 +201,20 @@ export class Game {
     // Setup HUD
     this.hudManager.init();
 
+    // Center camera on player 1's starting position (isometric coords)
+    const p1Spawn = (this.state.map as any).startPositions?.[0] as Vec2 | undefined;
+    if (p1Spawn) {
+      const isoX = (p1Spawn.x - p1Spawn.y) * (TILE_SIZE / 2);
+      const isoY = (p1Spawn.x + p1Spawn.y) * (TILE_SIZE / 4);
+      this.renderer.camera.x = isoX;
+      this.renderer.camera.y = isoY;
+      this.renderer.camera.targetX = isoX;
+      this.renderer.camera.targetY = isoY;
+    }
+
+    // Run initial fog of war pass so tiles are visible on first frame
+    this.fogOfWar.forceUpdate();
+
     // Start game loop
     this.running = true;
     this.lastTime = performance.now();
@@ -210,7 +225,7 @@ export class Game {
     this.audioManager.startBackgroundMusic();
     this.audioManager.startAmbientSounds();
 
-    console.log(`Game started: ${options.mode} on ${options.mapType} (${options.mapSize}x${options.mapSize})`);
+    console.log(`Game started: ${mode} on ${mapTypeStr} (${mapWidth}x${mapHeight})`);
   }
 
   private spawnStartingUnits(rng: SeededRandom): void {
@@ -291,6 +306,9 @@ export class Game {
 
   private update(dt: number): void {
     if (this.state.phase !== GamePhase.Playing) return;
+
+    // Update input (edge scroll, keyboard camera)
+    this.input.update(dt);
 
     // Process pending commands
     this.processCommands();
