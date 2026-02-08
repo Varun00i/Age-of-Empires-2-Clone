@@ -45,12 +45,15 @@ export class AudioManager {
       // Generate procedural sounds
       this.generateSounds();
 
-      // Resume on user interaction
-      document.addEventListener('click', () => {
+      // Resume on user interaction - multiple events for reliability
+      const resumeAudio = () => {
         if (this.audioCtx?.state === 'suspended') {
           this.audioCtx.resume();
         }
-      }, { once: true });
+      };
+      document.addEventListener('click', resumeAudio);
+      document.addEventListener('touchstart', resumeAudio);
+      document.addEventListener('keydown', resumeAudio);
     } catch {
       console.warn('WebAudio not available');
     }

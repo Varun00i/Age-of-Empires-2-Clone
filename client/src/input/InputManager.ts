@@ -139,6 +139,32 @@ export class InputManager {
       });
     }
 
+    // Mobile floating controls
+    document.getElementById('mob-build')?.addEventListener('click', () => {
+      this.game.hudManager?.toggleBuildMenu();
+    });
+    document.getElementById('mob-attack')?.addEventListener('click', () => {
+      // Attack-move mode toggle
+      if (this.game.selectedEntities.length > 0) {
+        this.game.hudManager?.showNotification('Tap target to attack-move');
+      }
+    });
+    document.getElementById('mob-idle')?.addEventListener('click', () => {
+      this.selectIdleVillager();
+    });
+    document.getElementById('mob-tc')?.addEventListener('click', () => {
+      this.selectBuildingsByType('townCenter');
+    });
+    document.getElementById('mob-pause')?.addEventListener('click', () => {
+      if (this.game.isPaused) {
+        this.game.resume();
+        this.game.menuManager?.hidePauseOverlay();
+      } else {
+        this.game.pause();
+        this.game.menuManager?.showPauseOverlay();
+      }
+    });
+
     // Resize
     window.addEventListener('resize', this.onResize.bind(this));
     this.onResize();
@@ -441,7 +467,13 @@ export class InputManager {
 
       case 'F3':
         e.preventDefault();
-        this.game.isPaused ? this.game.resume() : this.game.pause();
+        if (this.game.isPaused) {
+          this.game.resume();
+          this.game.menuManager?.hidePauseOverlay();
+        } else {
+          this.game.pause();
+          this.game.menuManager?.showPauseOverlay();
+        }
         break;
 
       case 'F11':

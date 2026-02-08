@@ -3,186 +3,183 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="Empires Risen - A browser-based real-time strategy game">
+  <meta name="description" content="Empires Risen - A browser-based real-time strategy game inspired by Age of Empires 2">
   <meta name="theme-color" content="#1a1a2e">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Empires Risen</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Cinzel+Decorative:wght@400;700;900&family=MedievalSharp&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --gold: #d4a944;
+      --gold-bright: #f0c654;
+      --gold-dark: #a07820;
+      --parchment: #e8d5a3;
+      --wood-dark: #1a1510;
+      --wood-med: #2a2520;
+      --wood-light: #3a3020;
+      --border: #4a3a20;
+      --border-highlight: #8b7355;
+      --text: #e0d8c8;
+      --text-dim: #8b8070;
+      --red: #c0392b;
+      --green: #27ae60;
+      --blue: #2980b9;
+      --bg-dark: #0a0a1a;
+      --bg-overlay: rgba(10, 10, 26, 0.95);
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a1a; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #e0d8c8; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-dark); font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: var(--text); }
     #app { width: 100%; height: 100%; position: relative; }
     #game-canvas { width: 100%; height: 100%; display: block; cursor: default; touch-action: none; }
     
     /* Loading Screen */
-    #loading-screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%); z-index: 1000; transition: opacity 0.5s; }
+    #loading-screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, #1a1a3e 0%, #0a0a1a 70%); z-index: 1000; transition: opacity 0.8s ease; }
     #loading-screen.hidden { opacity: 0; pointer-events: none; }
-    #loading-screen h1 { font-size: 3rem; color: #d4a944; text-shadow: 0 0 20px rgba(212, 169, 68, 0.5); margin-bottom: 1rem; font-family: Georgia, serif; letter-spacing: 0.1em; }
-    #loading-screen h2 { font-size: 1.2rem; color: #8b8070; margin-bottom: 2rem; font-weight: normal; }
-    .loading-bar-container { width: 300px; height: 6px; background: #2a2a3e; border-radius: 3px; overflow: hidden; }
-    .loading-bar { height: 100%; background: linear-gradient(90deg, #d4a944, #f0c060); width: 0%; transition: width 0.3s; border-radius: 3px; }
+    #loading-screen .logo { font-family: 'Cinzel Decorative', 'Cinzel', Georgia, serif; font-size: clamp(2rem, 6vw, 4rem); font-weight: 900; color: var(--gold); text-shadow: 0 0 30px rgba(212, 169, 68, 0.5), 0 4px 8px rgba(0,0,0,0.8); letter-spacing: 0.15em; margin-bottom: 0.5rem; }
+    #loading-screen .sub { font-size: 1rem; color: var(--text-dim); margin-bottom: 2rem; letter-spacing: 0.3em; text-transform: uppercase; }
+    .loading-bar-container { width: min(300px, 80vw); height: 6px; background: #2a2a3e; border-radius: 3px; overflow: hidden; border: 1px solid #3a3a5e; }
+    .loading-bar { height: 100%; background: linear-gradient(90deg, var(--gold-dark), var(--gold), var(--gold-bright)); width: 0%; transition: width 0.3s ease; border-radius: 3px; }
     #loading-text { margin-top: 1rem; font-size: 0.85rem; color: #6b6060; }
     
     /* Main Menu */
-    #main-menu { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #16213e 100%); z-index: 900; }
-    #main-menu.visible { display: flex; }
-    #main-menu h1 { font-size: 4rem; color: #d4a944; text-shadow: 0 0 30px rgba(212, 169, 68, 0.4); margin-bottom: 0.5rem; font-family: Georgia, serif; letter-spacing: 0.15em; }
-    #main-menu .subtitle { font-size: 1rem; color: #8b7b60; margin-bottom: 3rem; letter-spacing: 0.3em; text-transform: uppercase; }
-    .menu-btn { display: block; width: 280px; padding: 14px 24px; margin: 6px 0; background: linear-gradient(180deg, #2a2520 0%, #1a1510 100%); border: 1px solid #4a3a20; color: #d4a944; font-size: 1.1rem; cursor: pointer; transition: all 0.2s; text-align: center; font-family: Georgia, serif; letter-spacing: 0.05em; }
-    .menu-btn:hover { background: linear-gradient(180deg, #3a3020 0%, #2a2010 100%); border-color: #d4a944; transform: scale(1.02); box-shadow: 0 0 15px rgba(212, 169, 68, 0.2); }
+    #main-menu { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 900; overflow-y: auto; background: radial-gradient(ellipse at 50% 30%, rgba(30, 25, 15, 0.8) 0%, transparent 60%), linear-gradient(180deg, #0a0a1a 0%, #12101a 30%, #1a1520 60%, #0a0a0a 100%); }
+    #main-menu::before { content: ''; position: absolute; inset: 0; background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4a944' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); pointer-events: none; opacity: 0.5; }
+    
+    .menu-btn { display: block; width: 280px; max-width: 90vw; padding: 14px 24px; margin: 8px auto; background: linear-gradient(180deg, rgba(42, 37, 32, 0.9) 0%, rgba(26, 21, 16, 0.95) 100%); border: 1px solid var(--border); color: var(--gold); font-size: clamp(0.9rem, 2.5vw, 1.1rem); cursor: pointer; transition: all 0.25s ease; text-align: center; font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.08em; position: relative; overflow: hidden; }
+    .menu-btn::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(212,169,68,0.1), transparent); transform: translateX(-100%); transition: transform 0.5s ease; }
+    .menu-btn:hover { background: linear-gradient(180deg, rgba(58, 48, 32, 0.95) 0%, rgba(42, 32, 16, 0.98) 100%); border-color: var(--gold); transform: scale(1.03); box-shadow: 0 0 20px rgba(212, 169, 68, 0.15), inset 0 0 15px rgba(212, 169, 68, 0.05); text-shadow: 0 0 10px rgba(212, 169, 68, 0.5); }
+    .menu-btn:hover::before { transform: translateX(100%); }
     .menu-btn:active { transform: scale(0.98); }
-    .menu-btn.secondary { background: transparent; border-color: #3a3030; color: #8b7b60; font-size: 0.9rem; }
+    .menu-btn.primary { background: linear-gradient(180deg, rgba(45, 90, 30, 0.9), rgba(26, 58, 14, 0.95)); border-color: #4a7c3f; }
+    .menu-btn.primary:hover { background: linear-gradient(180deg, rgba(55, 100, 40, 0.95), rgba(36, 68, 24, 0.98)); border-color: #6aac5f; }
+    .menu-btn.secondary { background: transparent; border-color: #3a3030; color: var(--text-dim); font-size: 0.9rem; }
+    .menu-btn.secondary:hover { border-color: var(--border-highlight); color: var(--gold); }
     
-    /* HUD Overlay */
-    #hud { position: absolute; inset: 0; pointer-events: none; z-index: 100; display: none; }
-    #hud.visible { display: block; }
+    .setup-select, .setup-input { background: rgba(20, 16, 10, 0.8); border: 1px solid var(--border); color: var(--parchment); padding: 10px 12px; border-radius: 4px; width: 100%; font-size: 14px; transition: border-color 0.2s; }
+    .setup-select:focus, .setup-input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 8px rgba(212,169,68,0.2); }
+    .setup-label { color: var(--text-dim); font-size: 13px; margin-bottom: 4px; display: block; font-family: 'Cinzel', Georgia, serif; letter-spacing: 0.05em; }
+    .setup-row { margin-bottom: 14px; }
     
-    /* Resource Bar */
-    .resource-bar { position: absolute; top: 0; left: 0; right: 0; height: 32px; background: linear-gradient(180deg, #1a1510 0%, #0a0a08 100%); border-bottom: 1px solid #3a3020; display: flex; align-items: center; padding: 0 12px; gap: 20px; pointer-events: auto; font-size: 13px; }
+    /* HUD */
+    #game-hud { position: absolute; inset: 0; pointer-events: none; z-index: 100; display: none; }
+    #game-hud.visible { display: block; }
+    .resource-bar { position: absolute; top: 0; left: 0; right: 0; height: 34px; background: linear-gradient(180deg, #1a1510 0%, #0a0a08 100%); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; gap: 18px; pointer-events: auto; font-size: 13px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
     .resource-item { display: flex; align-items: center; gap: 4px; }
-    .resource-icon { width: 18px; height: 18px; border-radius: 2px; }
-    .resource-icon.food { background: #e74c3c; }
-    .resource-icon.wood { background: #27ae60; }
-    .resource-icon.gold { background: #f39c12; }
-    .resource-icon.stone { background: #7f8c8d; }
-    .resource-value { font-variant-numeric: tabular-nums; min-width: 32px; }
-    .pop-display { margin-left: auto; color: #8b8070; }
-    .age-display { color: #d4a944; font-weight: bold; margin-left: 12px; }
+    .resource-icon { width: 18px; height: 18px; border-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+    .resource-icon.food { background: linear-gradient(135deg, #e74c3c, #c0392b); }
+    .resource-icon.wood { background: linear-gradient(135deg, #27ae60, #1e8449); }
+    .resource-icon.gold { background: linear-gradient(135deg, #f39c12, #d4a944); }
+    .resource-icon.stone { background: linear-gradient(135deg, #95a5a6, #7f8c8d); }
+    .resource-value { font-variant-numeric: tabular-nums; min-width: 36px; font-weight: 600; }
+    .pop-display { color: var(--text-dim); font-weight: 600; }
+    .age-display { color: var(--gold); font-weight: bold; font-family: 'Cinzel', Georgia, serif; font-size: 12px; }
+    .idle-indicator { cursor: pointer; font-size: 12px; padding: 2px 6px; border-radius: 3px; display: none; transition: background 0.2s; pointer-events: auto; }
+    .idle-indicator:hover { background: rgba(255,255,255,0.1); }
+    .idle-indicator.villager { color: #f39c12; }
+    .idle-indicator.military { color: var(--red); }
     
-    /* Minimap */
-    .minimap-container { position: absolute; left: 0; bottom: 0; width: 200px; height: 160px; background: #0a0a08; border-top: 1px solid #3a3020; border-right: 1px solid #3a3020; pointer-events: auto; }
+    .minimap-container { position: absolute; left: 0; bottom: 0; width: 200px; height: 160px; background: #0a0a08; border-top: 1px solid var(--border); border-right: 1px solid var(--border); pointer-events: auto; box-shadow: 2px -2px 10px rgba(0,0,0,0.5); }
     .minimap-container canvas { width: 100%; height: 100%; }
+    .command-panel { position: absolute; bottom: 0; left: 200px; right: 0; height: 160px; background: linear-gradient(180deg, #1a1510 0%, #0a0a08 100%); border-top: 1px solid var(--border); display: flex; pointer-events: auto; box-shadow: 0 -2px 10px rgba(0,0,0,0.5); }
+    .unit-info { width: 250px; padding: 8px 12px; border-right: 1px solid #2a2018; display: flex; flex-direction: column; overflow-y: auto; }
+    .action-grid { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(3, 1fr); gap: 3px; padding: 6px; }
+    .action-btn { background: linear-gradient(180deg, var(--wood-med) 0%, var(--wood-dark) 100%); border: 1px solid var(--border); color: #c0b898; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; font-size: 11px; transition: all 0.15s; position: relative; text-align: center; padding: 2px; border-radius: 3px; }
+    .action-btn:hover { background: linear-gradient(180deg, var(--wood-light) 0%, var(--wood-med) 100%); border-color: var(--gold); transform: scale(1.05); }
+    .action-btn:active { transform: scale(0.95); }
+    .selection-box { position: absolute; border: 1px solid #00ff88; background: rgba(0, 255, 136, 0.08); pointer-events: none; z-index: 50; }
     
-    /* Command Panel */
-    .command-panel { position: absolute; bottom: 0; left: 200px; right: 0; height: 160px; background: linear-gradient(180deg, #1a1510 0%, #0a0a08 100%); border-top: 1px solid #3a3020; display: flex; pointer-events: auto; }
-    .unit-info { width: 250px; padding: 8px 12px; border-right: 1px solid #2a2018; display: flex; flex-direction: column; }
-    .unit-info .unit-name { color: #d4a944; font-size: 14px; font-weight: bold; margin-bottom: 4px; }
-    .unit-info .unit-hp-bar { width: 100%; height: 6px; background: #2a2018; border-radius: 3px; margin-bottom: 4px; }
-    .unit-info .unit-hp-fill { height: 100%; background: #27ae60; border-radius: 3px; transition: width 0.2s; }
-    .unit-info .unit-stats { font-size: 11px; color: #8b8070; line-height: 1.5; }
-    .action-grid { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2px; padding: 6px; }
-    .action-btn { background: linear-gradient(180deg, #2a2520 0%, #1a1510 100%); border: 1px solid #3a3020; color: #c0b898; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 11px; transition: all 0.15s; position: relative; text-align: center; padding: 2px; }
-    .action-btn:hover { background: linear-gradient(180deg, #3a3020 0%, #2a2010 100%); border-color: #d4a944; }
-    .action-btn.disabled { opacity: 0.4; pointer-events: none; }
-    .action-btn .hotkey { position: absolute; bottom: 1px; right: 3px; font-size: 9px; color: #6b6060; }
-    
-    /* Selection Box */
-    .selection-box { position: absolute; border: 1px solid #00ff88; background: rgba(0, 255, 136, 0.1); pointer-events: none; z-index: 50; }
-    
-    /* Chat */
     .chat-container { position: absolute; bottom: 170px; left: 10px; width: 350px; pointer-events: auto; }
     .chat-messages { max-height: 150px; overflow-y: auto; padding: 4px; font-size: 12px; }
-    .chat-input { width: 100%; padding: 6px 8px; background: rgba(10, 10, 20, 0.8); border: 1px solid #3a3020; color: #e0d8c8; font-size: 12px; display: none; }
+    .chat-input { width: 100%; padding: 6px 8px; background: rgba(10,10,20,0.85); border: 1px solid var(--border); color: var(--text); font-size: 12px; display: none; border-radius: 3px; }
     .chat-input.active { display: block; }
-    
-    /* Tooltips */
-    .tooltip { position: absolute; background: rgba(10, 10, 20, 0.95); border: 1px solid #4a3a20; padding: 8px 12px; font-size: 12px; max-width: 250px; z-index: 200; pointer-events: none; border-radius: 2px; }
-    .tooltip .tt-title { color: #d4a944; font-weight: bold; margin-bottom: 4px; }
-    .tooltip .tt-cost { color: #8b8070; }
-    .tooltip .tt-desc { color: #a09880; margin-top: 4px; font-style: italic; }
-    
-    /* Notifications */
-    .notification-area { position: absolute; top: 40px; right: 10px; width: 250px; }
-    .notification { background: rgba(26, 21, 16, 0.9); border: 1px solid #3a3020; padding: 8px 12px; margin-bottom: 4px; font-size: 12px; animation: notifSlide 0.3s ease; }
+    .notification-area { position: absolute; top: 42px; right: 10px; width: 280px; }
+    .notification { background: rgba(26, 21, 16, 0.92); border: 1px solid var(--border); border-left: 3px solid var(--gold); padding: 8px 12px; margin-bottom: 4px; font-size: 12px; animation: notifSlide 0.3s ease; border-radius: 0 4px 4px 0; }
     @keyframes notifSlide { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
     
-    /* Mobile Adjustments */
+    .mobile-controls { display: none; position: absolute; right: 10px; top: 42px; z-index: 150; pointer-events: auto; flex-direction: column; gap: 6px; }
+    .mobile-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(26, 21, 16, 0.85); border: 1px solid var(--border); color: var(--gold); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+    .mobile-btn:active { transform: scale(0.9); background: var(--wood-light); }
+    
     @media (max-width: 768px) {
       .minimap-container { width: 120px; height: 100px; }
-      .command-panel { left: 120px; height: 120px; }
-      .unit-info { width: 160px; }
-      .action-grid { grid-template-columns: repeat(4, 1fr); grid-template-rows: repeat(3, 1fr); }
-      .resource-bar { font-size: 11px; gap: 10px; }
+      .command-panel { left: 120px; height: 130px; }
+      .unit-info { width: 140px; padding: 6px; }
+      .action-grid { grid-template-columns: repeat(4, 1fr); }
+      .resource-bar { font-size: 11px; gap: 10px; height: 30px; }
       .chat-container { display: none; }
-      #main-menu h1 { font-size: 2.5rem; }
-      .menu-btn { width: 220px; padding: 12px 20px; font-size: 1rem; }
+      .mobile-controls { display: flex; }
     }
-    
     @media (max-width: 480px) {
       .minimap-container { width: 80px; height: 80px; }
-      .command-panel { left: 80px; height: 100px; }
+      .command-panel { left: 80px; height: 110px; }
       .action-grid { grid-template-columns: repeat(3, 1fr); }
-      .unit-info { width: 120px; font-size: 10px; }
+      .unit-info { width: 100px; font-size: 10px; }
+      .resource-bar { gap: 6px; padding: 0 6px; }
     }
-
-    /* Accessibility */
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
-    :focus-visible { outline: 2px solid #d4a944; outline-offset: 2px; }
+    :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--wood-dark); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-highlight); }
+    @keyframes logoGlow { from { text-shadow: 0 0 40px rgba(212,169,68,0.4), 0 0 80px rgba(212,169,68,0.2), 0 4px 12px rgba(0,0,0,0.9); } to { text-shadow: 0 0 60px rgba(212,169,68,0.6), 0 0 100px rgba(212,169,68,0.3), 0 4px 12px rgba(0,0,0,0.9); } }
   </style>
 </head>
 <body>
   <div id="app">
     <!-- Loading Screen -->
     <div id="loading-screen">
-      <h1>EMPIRES RISEN</h1>
-      <h2>Forging Your Empire...</h2>
+      <div class="logo">EMPIRES RISEN</div>
+      <div class="sub">Forging Your Empire...</div>
       <div class="loading-bar-container">
         <div class="loading-bar" id="loading-bar"></div>
       </div>
       <div id="loading-text">Initializing...</div>
     </div>
     
-    <!-- Main Menu -->
-    <div id="main-menu">
-      <h1>EMPIRES RISEN</h1>
-      <div class="subtitle">Rise. Conquer. Rule.</div>
-      <button class="menu-btn" id="btn-singleplayer">Single Player</button>
-      <button class="menu-btn" id="btn-multiplayer">Multiplayer</button>
-      <button class="menu-btn" id="btn-map-editor">Map Editor</button>
-      <button class="menu-btn secondary" id="btn-settings">Settings</button>
-      <button class="menu-btn secondary" id="btn-help">How to Play</button>
-    </div>
+    <!-- Main Menu (populated by MenuManager) -->
+    <div id="main-menu"></div>
     
     <!-- Game Canvas -->
     <canvas id="game-canvas" tabindex="0" role="application" aria-label="Game viewport"></canvas>
     
     <!-- HUD Overlay -->
-    <div id="hud">
-      <!-- Resource Bar -->
+    <div id="game-hud">
       <div class="resource-bar">
         <div class="resource-item"><div class="resource-icon food" title="Food"></div><span class="resource-value" id="res-food">200</span></div>
         <div class="resource-item"><div class="resource-icon wood" title="Wood"></div><span class="resource-value" id="res-wood">200</span></div>
         <div class="resource-item"><div class="resource-icon gold" title="Gold"></div><span class="resource-value" id="res-gold">0</span></div>
         <div class="resource-item"><div class="resource-icon stone" title="Stone"></div><span class="resource-value" id="res-stone">200</span></div>
-        <div class="pop-display"><span id="pop-current">0</span>/<span id="pop-max">5</span></div>
+        <div class="pop-display">🏠 <span id="pop-current">0</span>/<span id="pop-max">5</span></div>
         <div class="age-display" id="age-display">Dark Age</div>
-        <div style="margin-left:8px;display:flex;gap:6px;align-items:center;">
-          <span id="idle-vil" title="Idle Villagers (press .)" style="cursor:pointer;font-size:12px;color:#f39c12;display:none;">👷 0</span>
-          <span id="idle-mil" title="Idle Military (press ,)" style="cursor:pointer;font-size:12px;color:#e74c3c;display:none;">⚔️ 0</span>
-        </div>
-        <div style="margin-left:auto; font-size:11px; color:#6b6060;" id="game-timer">00:00</div>
+        <span id="idle-vil" class="idle-indicator villager" title="Idle Villagers (press .)">👷 0</span>
+        <span id="idle-mil" class="idle-indicator military" title="Idle Military (press ,)">⚔️ 0</span>
+        <div style="margin-left:auto; font-size:11px; color:#6b6060; font-variant-numeric:tabular-nums;" id="game-timer">00:00</div>
       </div>
-      
-      <!-- Minimap -->
-      <div class="minimap-container">
-        <canvas id="minimap-canvas"></canvas>
-      </div>
-      
-      <!-- Command Panel -->
+      <div class="minimap-container"><canvas id="minimap-canvas"></canvas></div>
       <div class="command-panel">
-        <div class="unit-info" id="unit-info">
-          <div class="unit-name" id="sel-name">No Selection</div>
-          <div class="unit-hp-bar"><div class="unit-hp-fill" id="sel-hp-bar" style="width:100%"></div></div>
-          <div class="unit-stats" id="sel-stats"></div>
-        </div>
+        <div class="unit-info" id="unit-info"><div class="unit-name" id="sel-name">No Selection</div></div>
         <div class="action-grid" id="action-grid"></div>
       </div>
-      
-      <!-- Chat -->
-      <div class="chat-container">
+      <div class="chat-container" id="chat-container">
         <div class="chat-messages" id="chat-messages"></div>
         <input type="text" class="chat-input" id="chat-input" placeholder="Press Enter to chat..." maxlength="200">
       </div>
-      
-      <!-- Notifications -->
       <div class="notification-area" id="notifications"></div>
+      <div class="mobile-controls" id="mobile-controls">
+        <button class="mobile-btn" id="mob-build" title="Build">🏗️</button>
+        <button class="mobile-btn" id="mob-attack" title="Attack Move">⚔️</button>
+        <button class="mobile-btn" id="mob-idle" title="Idle Villager">👷</button>
+        <button class="mobile-btn" id="mob-tc" title="Town Center">🏛️</button>
+        <button class="mobile-btn" id="mob-pause" title="Pause">⏸️</button>
+      </div>
     </div>
-    
-    <!-- Selection Box (drag select) -->
     <div class="selection-box" id="selection-box" style="display:none;"></div>
   </div>
-  
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

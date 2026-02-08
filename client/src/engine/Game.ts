@@ -181,7 +181,7 @@ export class Game {
     this.spawnStartingUnits(rng);
 
     // Initialize fog of war
-    const playerIds = Array.from(this.state.players.keys());
+    const playerIds = Array.from(this.state.players.keys()) as number[];
     this.fogOfWar.init(map.width, map.height, playerIds);
 
     // Initialize AI
@@ -428,9 +428,9 @@ export class Game {
     // Check every 5 seconds
     if (this.state.tick % (TICK_RATE * 5) !== 0) return;
 
-    const alivePlayers = Array.from(this.state.players.values()).filter(p => !p.isDefeated);
+    const alivePlayers = Array.from(this.state.players.values()).filter((p: any) => !p.isDefeated);
     if (alivePlayers.length <= 1) {
-      this.gameOver(alivePlayers[0]?.id ?? 0);
+      this.gameOver((alivePlayers[0] as any)?.id ?? 0);
     }
   }
 

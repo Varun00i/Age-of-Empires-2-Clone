@@ -68,7 +68,7 @@ export class UnitSystem {
     );
 
     if (path && path.length > 0) {
-      em.setUnitPath(entityId, path.map(p => ({ x: p.x + 0.5, y: p.y + 0.5 })));
+      em.setUnitPath(entityId, path.map((p: any) => ({ x: p.x + 0.5, y: p.y + 0.5 })));
       em.setUnitState(entityId, 'moving');
       em.setUnitTarget(entityId, null, target);
     }

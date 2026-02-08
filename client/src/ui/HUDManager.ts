@@ -484,7 +484,7 @@ export class HUDManager {
     // Group techs by building
     const groups: Record<string, string[]> = {};
     for (const [id, tech] of Object.entries(TECHNOLOGIES)) {
-      const building = tech.researchedAt ?? 'other';
+      const building = (tech as any).researchedAt ?? 'other';
       if (!groups[building]) groups[building] = [];
       groups[building].push(id);
     }
@@ -494,10 +494,10 @@ export class HUDManager {
       html += `<div style="background:rgba(30,25,20,0.8);border:1px solid #3a3020;border-radius:8px;padding:12px;">`;
       html += `<h3 style="color:#d4a944;margin-bottom:8px;text-transform:capitalize;">${building.replace(/([A-Z])/g, ' $1').trim()}</h3>`;
       for (const techId of techs) {
-        const tech = TECHNOLOGIES[techId];
+        const tech = TECHNOLOGIES[techId] as any;
         const isResearched = researched.has(techId);
         const costStr = Object.entries(tech.cost ?? {})
-          .filter(([, v]) => (v ?? 0) > 0)
+          .filter(([, v]) => ((v as any) ?? 0) > 0)
           .map(([r, v]) => `${v} ${r}`)
           .join(', ');
         const borderColor = isResearched ? '#27ae60' : '#4a3a20';

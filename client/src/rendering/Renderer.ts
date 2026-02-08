@@ -179,16 +179,28 @@ export class Renderer {
 
   private createUnitSprite(bodyColor: string, outlineColor: string, size: number, hasShield: boolean): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
-    canvas.width = size * 3;
-    canvas.height = size * 3;
+    const s = size * 3;
+    canvas.width = s;
+    canvas.height = s;
     const ctx = canvas.getContext('2d')!;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const cx = s / 2;
+    const cy = s / 2;
+    const r = size / 2;
 
-    // Body
-    ctx.fillStyle = bodyColor;
+    // Drop shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.beginPath();
-    ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+    ctx.ellipse(cx, cy + r * 0.6, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Body gradient for depth
+    const bodyGrad = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.3, 0, cx, cy, r);
+    bodyGrad.addColorStop(0, this.lightenHex(bodyColor, 40));
+    bodyGrad.addColorStop(0.7, bodyColor);
+    bodyGrad.addColorStop(1, outlineColor);
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
 
     // Outline
@@ -196,45 +208,89 @@ export class Renderer {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Shield indicator
+    // Shield indicator — draw a small rectangle on the side
     if (hasShield) {
       ctx.fillStyle = outlineColor;
-      ctx.fillRect(cx - size / 3, cy - size / 4, size / 4, size / 2);
+      const sw = r * 0.35;
+      const sh = r * 0.7;
+      ctx.fillRect(cx - r * 0.6, cy - sh / 2, sw, sh);
+      ctx.strokeStyle = this.lightenHex(outlineColor, 30);
+      ctx.lineWidth = 0.7;
+      ctx.strokeRect(cx - r * 0.6, cy - sh / 2, sw, sh);
     }
 
+    // Highlight dot (glint)
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.25, cy - r * 0.3, r * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
     return canvas;
+  }
+
+  private lightenHex(hex: string, amount: number): string {
+    const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
+    const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
+    const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
+    return `rgb(${r},${g},${b})`;
   }
 
   private createBuildingSprite(wallColor: string, roofColor: string, tileSize: number): HTMLCanvasElement {
     const pixSize = tileSize * TILE_SIZE * 0.4;
     const canvas = document.createElement('canvas');
     canvas.width = pixSize + 20;
-    canvas.height = pixSize + 20;
+    canvas.height = pixSize + 30;
     const ctx = canvas.getContext('2d')!;
     const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
+    const cy = canvas.height / 2 + 5;
 
-    // Building body (isometric box)
     const w = pixSize * 0.8;
     const h = pixSize * 0.6;
 
-    // Base
-    ctx.fillStyle = wallColor;
+    // Base shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + h / 2 + 3, w / 2 + 4, h * 0.15 + 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Wall with gradient
+    const wallGrad = ctx.createLinearGradient(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2);
+    wallGrad.addColorStop(0, this.lightenHex(wallColor, 20));
+    wallGrad.addColorStop(0.5, wallColor);
+    wallGrad.addColorStop(1, roofColor);
+    ctx.fillStyle = wallGrad;
     ctx.fillRect(cx - w / 2, cy - h / 2, w, h);
 
-    // Roof
-    ctx.fillStyle = roofColor;
+    // Window/door detail
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    if (tileSize >= 3) {
+      // Door
+      const dw = w * 0.12;
+      const dh = h * 0.35;
+      ctx.fillRect(cx - dw / 2, cy + h / 2 - dh, dw, dh);
+      // Windows
+      const winSize = Math.max(2, w * 0.08);
+      ctx.fillRect(cx - w * 0.25, cy - h * 0.15, winSize, winSize);
+      ctx.fillRect(cx + w * 0.15, cy - h * 0.15, winSize, winSize);
+    }
+
+    // Roof with gradient
+    const roofGrad = ctx.createLinearGradient(cx, cy - h / 2 - h * 0.3, cx, cy - h / 2);
+    roofGrad.addColorStop(0, this.lightenHex(roofColor, 15));
+    roofGrad.addColorStop(1, roofColor);
+    ctx.fillStyle = roofGrad;
     ctx.beginPath();
     ctx.moveTo(cx - w / 2 - 3, cy - h / 2);
-    ctx.lineTo(cx, cy - h / 2 - h * 0.3);
+    ctx.lineTo(cx, cy - h / 2 - h * 0.35);
     ctx.lineTo(cx + w / 2 + 3, cy - h / 2);
     ctx.closePath();
     ctx.fill();
 
     // Outline
-    ctx.strokeStyle = '#00000040';
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
     ctx.lineWidth = 1;
     ctx.strokeRect(cx - w / 2, cy - h / 2, w, h);
+    ctx.stroke(); // roof outline
 
     return canvas;
   }
@@ -428,24 +484,35 @@ export class Renderer {
         let color = '#888';
         switch (tile.terrain) {
           case TerrainType.Forest:
-            // Draw tree
+            // Draw detailed tree with trunk and layered canopy
+            this.ctx.fillStyle = '#3a2a10';
+            this.ctx.fillRect(screenX - 1, screenY - 4, 3, 10);
+            // Dark canopy layer
             this.ctx.fillStyle = '#1a4a0e';
             this.ctx.beginPath();
-            this.ctx.arc(screenX, screenY - 10, 8, 0, Math.PI * 2);
+            this.ctx.arc(screenX, screenY - 11, 9, 0, Math.PI * 2);
             this.ctx.fill();
-            this.ctx.fillStyle = '#3a2a10';
-            this.ctx.fillRect(screenX - 1, screenY - 4, 2, 8);
+            // Lighter highlight
+            this.ctx.fillStyle = '#2a6a1e';
+            this.ctx.beginPath();
+            this.ctx.arc(screenX - 2, screenY - 13, 5, 0, Math.PI * 2);
+            this.ctx.fill();
             break;
           default:
-            // Gold / stone patches
+            // Gold / stone patches with layered stones
             color = tile.resourceType === 'gold' ? '#f4d03f' : '#95a5a6';
+            const highlight = tile.resourceType === 'gold' ? '#ffe680' : '#bdc3c7';
             this.ctx.fillStyle = color;
             this.ctx.beginPath();
-            this.ctx.arc(screenX, screenY - 3, 5, 0, Math.PI * 2);
+            this.ctx.arc(screenX - 2, screenY - 2, 5, 0, Math.PI * 2);
             this.ctx.fill();
-            this.ctx.fillStyle = color + '80';
+            this.ctx.fillStyle = highlight;
             this.ctx.beginPath();
-            this.ctx.arc(screenX + 4, screenY - 1, 3, 0, Math.PI * 2);
+            this.ctx.arc(screenX + 3, screenY - 4, 3.5, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.fillStyle = color + 'b0';
+            this.ctx.beginPath();
+            this.ctx.arc(screenX + 1, screenY + 1, 3, 0, Math.PI * 2);
             this.ctx.fill();
             break;
         }
