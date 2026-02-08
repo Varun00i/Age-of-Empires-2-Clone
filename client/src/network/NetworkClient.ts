@@ -208,7 +208,7 @@ export class NetworkClient {
     switch (msg.type) {
       case MessageType.Connect:
         this._playerId = (msg.payload as any).playerId;
-        this.game.localPlayerId = this._playerId as any;
+        this.game.localPlayerId = Number(this._playerId);
         break;
 
       case MessageType.GameState:
@@ -311,13 +311,6 @@ export class NetworkClient {
 
   sendCommand(command: GameCommand): void {
     this.pendingCommands.push(command);
-
-    // Send immediately
-    this.send({
-      type: MessageType.GameCommand,
-      payload: { commands: [command] },
-      timestamp: Date.now(),
-    });
   }
 
   sendChat(message: string): void {

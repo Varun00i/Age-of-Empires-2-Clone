@@ -170,7 +170,20 @@ export class EntityManager {
 
   removeEntity(id: EntityId): void {
     const pos = this.positions.get(id);
-    if (pos) this.removeFromSpatialGrid(id, pos.x, pos.y);
+    if (pos) {
+      // Buildings occupy multiple grid cells — clean them all up
+      const building = this.buildings.get(id);
+      if (building) {
+        const size = building.data.size ?? { x: 2, y: 2 };
+        for (let dy = 0; dy < size.y; dy++) {
+          for (let dx = 0; dx < size.x; dx++) {
+            this.removeFromSpatialGrid(id, pos.x + dx, pos.y + dy);
+          }
+        }
+      } else {
+        this.removeFromSpatialGrid(id, pos.x, pos.y);
+      }
+    }
 
     this.entities.delete(id);
     this.positions.delete(id);

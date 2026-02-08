@@ -38,8 +38,8 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.DeepWater]: '#1a5276',
   [TerrainType.ShallowWater]: '#5dade2',
   [TerrainType.Forest]: '#2d5a1e',
-  [TerrainType.Snow]: '#ddd',
-  [TerrainType.Ice]: '#aee',
+  [TerrainType.Snow]: '#dddddd',
+  [TerrainType.Ice]: '#aaeeee',
   [TerrainType.Farm]: '#8fbc54',
   [TerrainType.Road]: '#9a8c76',
   [TerrainType.Beach]: '#daa520',
@@ -53,8 +53,8 @@ const TERRAIN_COLORS_DARK: Record<TerrainType, string> = {
   [TerrainType.DeepWater]: '#0a4266',
   [TerrainType.ShallowWater]: '#4d9dd2',
   [TerrainType.Forest]: '#1d4a0e',
-  [TerrainType.Snow]: '#ccc',
-  [TerrainType.Ice]: '#9dd',
+  [TerrainType.Snow]: '#cccccc',
+  [TerrainType.Ice]: '#99dddd',
   [TerrainType.Farm]: '#7fac44',
   [TerrainType.Road]: '#8a7c66',
   [TerrainType.Beach]: '#ca9510',
@@ -120,11 +120,11 @@ export class Renderer {
   private generateSprites(): void {
     // Generate unit sprites procedurally
     this.unitSprites.set('villager', this.createUnitSprite('#e0c070', '#8b6914', 8, false));
-    this.unitSprites.set('militia', this.createUnitSprite('#888', '#555', 10, true));
-    this.unitSprites.set('manAtArms', this.createUnitSprite('#999', '#666', 10, true));
-    this.unitSprites.set('longSwordsman', this.createUnitSprite('#aaa', '#777', 11, true));
-    this.unitSprites.set('twoHandedSwordsman', this.createUnitSprite('#bbb', '#888', 12, true));
-    this.unitSprites.set('champion', this.createUnitSprite('#ddd', '#999', 12, true));
+    this.unitSprites.set('militia', this.createUnitSprite('#888888', '#555555', 10, true));
+    this.unitSprites.set('manAtArms', this.createUnitSprite('#999999', '#666666', 10, true));
+    this.unitSprites.set('longSwordsman', this.createUnitSprite('#aaaaaa', '#777777', 11, true));
+    this.unitSprites.set('twoHandedSwordsman', this.createUnitSprite('#bbbbbb', '#888888', 12, true));
+    this.unitSprites.set('champion', this.createUnitSprite('#dddddd', '#999999', 12, true));
     this.unitSprites.set('spearman', this.createUnitSprite('#a88850', '#705020', 12, true));
     this.unitSprites.set('pikeman', this.createUnitSprite('#b09860', '#806030', 14, true));
     this.unitSprites.set('halberdier', this.createUnitSprite('#c0a870', '#907040', 14, true));
@@ -172,7 +172,7 @@ export class Renderer {
     this.buildingSprites.set('guardTower', this.createBuildingSprite('#909090', '#606060', 1));
     this.buildingSprites.set('keep', this.createBuildingSprite('#a0a0a0', '#707070', 1));
     this.buildingSprites.set('palisadeWall', this.createBuildingSprite('#8b7355', '#5b4325', 1));
-    this.buildingSprites.set('stoneWall', this.createBuildingSprite('#999', '#666', 1));
+    this.buildingSprites.set('stoneWall', this.createBuildingSprite('#999999', '#666666', 1));
     this.buildingSprites.set('outpost', this.createBuildingSprite('#8b7b55', '#5b4b25', 1));
     this.buildingSprites.set('wonder', this.createBuildingSprite('#d4a944', '#947010', 5));
   }
@@ -228,10 +228,20 @@ export class Renderer {
     return canvas;
   }
 
+  /** Expand shorthand #RGB / #RGBA to #RRGGBB / #RRGGBBAA */
+  private normalizeHex(hex: string): string {
+    if (hex.length === 4 || hex.length === 5) {
+      // #RGB or #RGBA → #RRGGBB or #RRGGBBAA
+      return '#' + hex.slice(1).split('').map(c => c + c).join('');
+    }
+    return hex;
+  }
+
   private lightenHex(hex: string, amount: number): string {
-    const r = Math.min(255, parseInt(hex.slice(1, 3), 16) + amount);
-    const g = Math.min(255, parseInt(hex.slice(3, 5), 16) + amount);
-    const b = Math.min(255, parseInt(hex.slice(5, 7), 16) + amount);
+    const h = this.normalizeHex(hex);
+    const r = Math.min(255, parseInt(h.slice(1, 3), 16) + amount);
+    const g = Math.min(255, parseInt(h.slice(3, 5), 16) + amount);
+    const b = Math.min(255, parseInt(h.slice(5, 7), 16) + amount);
     return `rgb(${r},${g},${b})`;
   }
 
@@ -412,7 +422,7 @@ export class Renderer {
           // Animated water with wave effect
           const wave = Math.sin(this.animTime * 0.003 + x * 0.5 + y * 0.3) * 0.15 + 0.85;
           const wave2 = Math.sin(this.animTime * 0.002 + x * 0.3 - y * 0.5) * 0.1;
-          const base = TERRAIN_COLORS[tile.terrain];
+          const base = this.normalizeHex(TERRAIN_COLORS[tile.terrain]);
           const r = parseInt(base.slice(1, 3), 16);
           const g = parseInt(base.slice(3, 5), 16);
           const b = parseInt(base.slice(5, 7), 16);
@@ -481,7 +491,7 @@ export class Renderer {
         const screenY = (x + y) * (this.ISO_H / 2);
 
         // Draw resource indicator
-        let color = '#888';
+        let color = '#888888';
         switch (tile.terrain) {
           case TerrainType.Forest:
             // Draw detailed tree with trunk and layered canopy
@@ -840,9 +850,10 @@ export class Renderer {
   }
 
   private darkenColor(hex: string, factor: number): string {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
+    const h = this.normalizeHex(hex);
+    const r = parseInt(h.slice(1, 3), 16);
+    const g = parseInt(h.slice(3, 5), 16);
+    const b = parseInt(h.slice(5, 7), 16);
     return `rgb(${Math.floor(r * factor)},${Math.floor(g * factor)},${Math.floor(b * factor)})`;
   }
 
@@ -881,7 +892,7 @@ export class Renderer {
       blood: ['#c0392b', '#e74c3c', '#922b21'],
       spark: ['#f39c12', '#f1c40f', '#fff'],
       dust: ['#8b7355', '#a09080', '#6b5335'],
-      smoke: ['#555', '#666', '#777'],
+      smoke: ['#555555', '#666666', '#777777'],
       gold: ['#f4d03f', '#f39c12', '#e8b810'],
       wood: ['#6b4226', '#8b5e3c', '#a0724c'],
       food: ['#e74c3c', '#27ae60', '#f39c12'],

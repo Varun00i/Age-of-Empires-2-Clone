@@ -571,7 +571,7 @@ export class InputManager {
         this.game.issueCommand({
           type: CommandType.Move,
           entityIds: [...this.game.selectedEntities],
-          targetPosition: world,
+          position: world,
           playerId: this.game.localPlayerId,
         });
         this.addIndicator(world.x, world.y, 'move');
@@ -587,7 +587,7 @@ export class InputManager {
         this.game.issueCommand({
           type: CommandType.Gather,
           entityIds: this.getSelectedVillagers(),
-          targetPosition: { x: tileX + 0.5, y: tileY + 0.5 },
+          position: { x: tileX + 0.5, y: tileY + 0.5 },
           playerId: this.game.localPlayerId,
         });
         this.addIndicator(tileX + 0.5, tileY + 0.5, 'gather');
@@ -596,7 +596,7 @@ export class InputManager {
         this.game.issueCommand({
           type: CommandType.Move,
           entityIds: [...this.game.selectedEntities],
-          targetPosition: world,
+          position: world,
           playerId: this.game.localPlayerId,
         });
         this.addIndicator(world.x, world.y, 'move');

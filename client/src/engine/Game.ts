@@ -184,6 +184,9 @@ export class Game {
     const playerIds = Array.from(this.state.players.keys()) as number[];
     this.fogOfWar.init(map.width, map.height, playerIds);
 
+    // Initialize resource system (market rates, gather modifiers)
+    this.resourceSystem.init(playerIds);
+
     // Initialize AI
     for (const [id, player] of this.state.players) {
       if (player.isAI) {
@@ -357,6 +360,11 @@ export class Game {
             const tpos = this.entityManager.getPosition(cmd.targetId!);
             if (tpos) this.unitSystem.gatherResource(eid, cmd.targetId!, tpos);
           }
+        } else if (cmd.entityIds && cmd.position) {
+          // Tile-based gathering (no entity target)
+          for (const eid of cmd.entityIds) {
+            this.unitSystem.gatherResource(eid, null, cmd.position);
+          }
         }
         break;
       case CommandType.Garrison:
@@ -410,6 +418,15 @@ export class Game {
         break;
       case CommandType.Resign:
         this.playerDefeated(cmd.playerId);
+        break;
+      case CommandType.Chat:
+        if (cmd.message) {
+          const player = this.state.players.get(cmd.playerId);
+          const name = player?.name ?? 'Unknown';
+          const color = '#' + (player?.color ?? 0xffffff).toString(16).padStart(6, '0');
+          this.hudManager.addChatMessage(name, cmd.message, color);
+          this.audioManager?.play('chat');
+        }
         break;
     }
   }

@@ -167,7 +167,6 @@ export class CombatSystem {
 
   private updateProjectiles(dt: number): void {
     const em = this.game.entityManager;
-    const speed = dt * 0.001;
 
     this.projectiles = this.projectiles.filter(proj => {
       proj.age += dt;
@@ -196,12 +195,12 @@ export class CombatSystem {
       }
 
       // Move
-      const moveSpeed = proj.speed * speed;
+      const moveSpeed = proj.speed * dt;
       proj.x += (dx / dist) * Math.min(moveSpeed, dist);
       proj.y += (dy / dist) * Math.min(moveSpeed, dist);
 
-      // Max age (prevent stuck projectiles)
-      return proj.age < 5000;
+      // Max age (prevent stuck projectiles — 5 seconds)
+      return proj.age < 5;
     });
   }
 

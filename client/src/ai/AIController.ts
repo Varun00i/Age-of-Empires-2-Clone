@@ -390,7 +390,7 @@ export class AIController {
       this.game.issueCommand({
         type: CommandType.AttackMove,
         entityIds: military,
-        targetPosition: targetPos,
+        position: targetPos,
         playerId,
       });
     }
@@ -420,7 +420,7 @@ export class AIController {
         if (!tile || !tile.resourceType || !tile.resourceAmount || tile.resourceAmount <= 0) continue;
 
         if (tile.resourceType === resourceType ||
-          (resourceType === 'food' && tile.terrain === 6)) { // Forest for wood
+          (resourceType === 'wood' && tile.terrain === 6)) { // Forest tiles for wood
           const dist = Math.hypot(dx, dy);
           if (dist < bestDist) {
             bestDist = dist;
@@ -434,7 +434,7 @@ export class AIController {
       this.game.issueCommand({
         type: CommandType.Gather,
         entityIds: [villagerId],
-        targetPosition: bestPos,
+        position: bestPos,
         playerId,
       });
     }
@@ -560,7 +560,7 @@ export class AIController {
       }
 
       // Ring the town bell
-      this.game.hudManager.showNotification(`Player ${playerId} is under attack!`, '#e74c3c');
+      this.game.hudManager?.showNotification(`Player ${playerId} is under attack!`, '#e74c3c');
     }
   }
 

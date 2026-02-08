@@ -8,7 +8,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { RoomManager } from './RoomManager.js';
 import { ClientConnection } from './ClientConnection.js';
 import { readFileSync, existsSync, statSync } from 'fs';
-import { join, extname, dirname } from 'path';
+import { join, extname, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,7 +37,16 @@ const MIME_TYPES: Record<string, string> = {
 function serveStaticFile(res: ServerResponse, urlPath: string): boolean {
   if (!IS_PRODUCTION) return false;
 
-  let filePath = join(CLIENT_DIST, urlPath === '/' ? 'index.html' : urlPath);
+  // Sanitize path to prevent directory traversal
+  const safePath = urlPath.replace(/\.\./g, '').replace(/\/\//g, '/');
+  let filePath = join(CLIENT_DIST, safePath === '/' ? 'index.html' : safePath);
+
+  // Ensure resolved path is within CLIENT_DIST
+  const resolved = resolve(filePath);
+  const distResolved = resolve(CLIENT_DIST);
+  if (!resolved.startsWith(distResolved)) {
+    return false;
+  }
 
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     // SPA fallback - serve index.html for client-side routes
