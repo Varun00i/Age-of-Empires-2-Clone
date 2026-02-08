@@ -1,0 +1,35 @@
+{
+  "name": "empires-risen",
+  "version": "1.0.0",
+  "description": "A browser-based real-time strategy game inspired by Age of Empires 2",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "cd client && npm run dev",
+    "dev:server": "cd server && npm run dev",
+    "build": "npm run build:shared && npm run build:client && npm run build:server",
+    "build:shared": "cd shared && npm run build",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "test": "npm run test:shared && npm run test:client && npm run test:server",
+    "test:shared": "cd shared && npm test",
+    "test:client": "cd client && npm test",
+    "test:server": "cd server && npm test",
+    "lint": "eslint . --ext .ts,.tsx",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "typescript": "^5.3.0",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  }
+}
