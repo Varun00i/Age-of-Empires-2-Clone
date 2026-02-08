@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy workspace config
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json* tsconfig.json ./
 COPY shared/package.json shared/
 COPY client/package.json client/
 COPY server/package.json server/
