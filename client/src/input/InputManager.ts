@@ -121,6 +121,12 @@ export class InputManager {
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     this.canvas.addEventListener('wheel', this.onWheel.bind(this));
 
+    // Track mouse globally for edge scrolling (HUD elements overlay canvas edges)
+    window.addEventListener('mousemove', (e) => {
+      this.mouseX = e.clientX;
+      this.mouseY = e.clientY;
+    });
+
     // Keyboard events
     window.addEventListener('keydown', this.onKeyDown.bind(this));
     window.addEventListener('keyup', this.onKeyUp.bind(this));
@@ -136,6 +142,10 @@ export class InputManager {
       minimap.addEventListener('mousedown', this.onMinimapClick.bind(this));
       minimap.addEventListener('mousemove', (e) => {
         if (e.buttons & 1) this.onMinimapClick(e);
+      });
+      minimap.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        this.onMinimapRightClick(e);
       });
     }
 
@@ -424,8 +434,17 @@ export class InputManager {
       case 'Escape':
         if (this.buildMode) {
           this.cancelBuildMode();
-        } else {
+        } else if (this.game.selectedEntities.length > 0) {
           this.game.clearSelection();
+        } else {
+          // Toggle pause menu
+          if (this.game.isPaused) {
+            this.game.resume();
+            this.game.menuManager?.hidePauseOverlay();
+          } else {
+            this.game.pause();
+            this.game.menuManager?.showPauseOverlay();
+          }
         }
         break;
 
@@ -518,6 +537,16 @@ export class InputManager {
         this.game.selectedEntities = [entity];
       }
     } else if (!addToSelection) {
+      // Check for resource tile info
+      const tileX = Math.floor(world.x);
+      const tileY = Math.floor(world.y);
+      const tile = this.game.state.map?.tiles[tileY]?.[tileX];
+      if (tile?.resourceType && tile?.resourceAmount) {
+        // Show tile resource info in HUD
+        this.game.clearSelection();
+        this.game.hudManager?.showTileResourceInfo(tileX, tileY, tile.resourceType, tile.resourceAmount);
+        return;
+      }
       this.game.clearSelection();
     }
 
@@ -714,6 +743,30 @@ export class InputManager {
     this.game.renderer.centerOnPosition(worldX, worldY);
   }
 
+  private onMinimapRightClick(e: MouseEvent): void {
+    if (this.game.selectedEntities.length === 0) return;
+
+    const minimap = e.target as HTMLCanvasElement;
+    const rect = minimap.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const map = this.game.state.map;
+    if (!map) return;
+
+    const worldX = (x / minimap.width) * map.width;
+    const worldY = (y / minimap.height) * map.height;
+
+    // Issue move command to minimap position
+    this.game.issueCommand({
+      type: CommandType.Move,
+      entityIds: [...this.game.selectedEntities],
+      position: { x: worldX, y: worldY },
+      playerId: this.game.localPlayerId,
+    });
+    this.addIndicator(worldX, worldY, 'move');
+  }
+
   // ---- Selection Helpers ----
 
   private hasVillagerSelected(): boolean {
@@ -790,7 +843,7 @@ export class InputManager {
   }
 
   private addIndicator(x: number, y: number, type: 'move' | 'attack' | 'gather'): void {
-    this.indicators.push({ x, y, type, age: 0, maxAge: 800 });
+    this.indicators.push({ x, y, type, age: 0, maxAge: 0.8 });
   }
 
   private onResize(): void {

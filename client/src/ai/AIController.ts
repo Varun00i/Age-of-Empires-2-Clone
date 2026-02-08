@@ -60,18 +60,19 @@ export class AIController {
   }
 
   update(dt: number): void {
+    const dtMs = dt * 1000; // dt comes in seconds, convert to ms
     for (const [playerId, aiState] of this.aiPlayers) {
       const mod = DIFFICULTY_MODIFIERS[aiState.difficulty];
 
-      // Resource bonus for harder difficulties
-      if (mod.resourceBonus > 0 && Math.random() < 0.05) {
-        const bonus = Math.floor(10 * mod.resourceBonus);
+      // Resource bonus for harder difficulties (trickle per think)
+      if (mod.resourceBonus > 0) {
+        const bonus = Math.floor(2 * mod.resourceBonus);
         this.game.resourceSystem.addResource(playerId, 'food' as ResourceType, bonus);
         this.game.resourceSystem.addResource(playerId, 'wood' as ResourceType, bonus);
         this.game.resourceSystem.addResource(playerId, 'gold' as ResourceType, Math.floor(bonus * 0.5));
       }
 
-      aiState.lastActionTime += dt;
+      aiState.lastActionTime += dtMs;
       if (aiState.lastActionTime < mod.thinkInterval) continue;
       aiState.lastActionTime = 0;
 
@@ -84,8 +85,8 @@ export class AIController {
       this.thinkBuildings(aiState);
       this.thinkResearch(aiState);
       this.thinkDefense(aiState);
-      this.thinkScout(aiState, dt);
-      this.thinkAttack(aiState, dt);
+      this.thinkScout(aiState, dtMs);
+      this.thinkAttack(aiState, dtMs);
     }
   }
 
@@ -280,6 +281,10 @@ export class AIController {
       needs.push({ type: 'lumberCamp', max: 2 });
       needs.push({ type: 'mill', max: 1 });
       needs.push({ type: 'miningCamp', max: 1 });
+      // Build farms once berries run low
+      if (res.food < 300 && villagers.length >= 8) {
+        needs.push({ type: 'farm', max: 5 });
+      }
     }
 
     // Feudal age buildings
@@ -288,6 +293,7 @@ export class AIController {
       needs.push({ type: 'archeryRange', max: 1 });
       needs.push({ type: 'blacksmith', max: 1 });
       needs.push({ type: 'market', max: 1 });
+      needs.push({ type: 'farm', max: 8 });
     }
 
     // Castle age buildings
@@ -298,6 +304,7 @@ export class AIController {
       needs.push({ type: 'siegeWorkshop', max: 1 });
       if (res.stone >= 650) needs.push({ type: 'castle', max: 1 });
       needs.push({ type: 'townCenter', max: 3 });
+      needs.push({ type: 'farm', max: 15 });
     }
 
     // Imperial age buildings
@@ -305,6 +312,7 @@ export class AIController {
       needs.push({ type: 'barracks', max: 4 });
       needs.push({ type: 'archeryRange', max: 3 });
       needs.push({ type: 'stable', max: 3 });
+      needs.push({ type: 'farm', max: 25 });
     }
 
     // Build first needed building
@@ -334,15 +342,15 @@ export class AIController {
     }
   }
 
-  private thinkAttack(ai: AIState, dt: number): void {
+  private thinkAttack(ai: AIState, dtMs: number): void {
     const em = this.game.entityManager;
     const playerId = ai.playerId;
 
-    ai.attackTimer -= dt;
+    ai.attackTimer -= dtMs;
     if (ai.attackTimer > 0) return;
 
-    // Reset attack timer
-    ai.attackTimer = DIFFICULTY_MODIFIERS[ai.difficulty].attackDelay * 0.5;
+    // Reset attack timer (shorter for aggressive gameplay)
+    ai.attackTimer = DIFFICULTY_MODIFIERS[ai.difficulty].attackDelay * 0.4;
 
     // Gather military units
     const military: EntityId[] = [];
@@ -354,7 +362,7 @@ export class AIController {
       military.push(entity.id);
     }
 
-    if (military.length < ai.militaryTarget * 0.6) return;
+    if (military.length < Math.max(3, ai.militaryTarget * 0.4)) return;
 
     // Find enemy base
     let targetPos: { x: number; y: number } | null = null;
@@ -566,13 +574,13 @@ export class AIController {
 
   // ---- Scouting ----
 
-  private thinkScout(ai: AIState, dt: number): void {
+  private thinkScout(ai: AIState, dtMs: number): void {
     const em = this.game.entityManager;
     const playerId = ai.playerId;
 
-    ai.scoutTimer -= dt;
+    ai.scoutTimer -= dtMs;
     if (ai.scoutTimer > 0) return;
-    ai.scoutTimer = 10000; // Scout every 10 seconds
+    ai.scoutTimer = 8000; // Scout every 8 seconds
 
     // Find scout unit
     const scouts = em.getUnitsByType('scoutCavalry', playerId);

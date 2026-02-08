@@ -49,7 +49,7 @@ export class Game {
 
   private lastTime: number = 0;
   private accumulator: number = 0;
-  private running: boolean = false;
+  public running: boolean = false;
   private animFrameId: number = 0;
   private tickCount: number = 0;
 
@@ -226,6 +226,86 @@ export class Game {
     this.audioManager.startAmbientSounds();
 
     console.log(`Game started: ${mode} on ${mapTypeStr} (${mapWidth}x${mapHeight})`);
+  }
+
+  restoreFromSave(save: any): void {
+    // Reconstruct player map
+    const players: Map<number, PlayerState> = new Map();
+    for (const p of save.players) {
+      players.set(p.id, {
+        ...p,
+        researchedTechs: new Set(p.researchedTechs ?? []),
+        diplomacy: p.diplomacy ?? {},
+        exploredTiles: new Set(),
+        idleVillagers: p.idleVillagers ?? [],
+        militaryUnits: p.militaryUnits ?? [],
+        buildings: p.buildings ?? [],
+      });
+    }
+
+    // Restore game state
+    this.state = {
+      tick: save.tick ?? 0,
+      phase: GamePhase.Playing,
+      mode: save.mode ?? GameMode.RandomMap,
+      mapType: save.mapType ?? 'arabia',
+      mapSize: save.mapSize ?? 120,
+      map: save.map as any,
+      players,
+      entities: new Map(),
+      victoryConditions: [VictoryCondition.Conquest],
+      gameSpeed: save.gameSpeed ?? 1.0,
+      timeElapsed: save.timeElapsed ?? 0,
+      maxPlayers: save.maxPlayers ?? 2,
+      seed: save.seed ?? Date.now(),
+    };
+
+    // Restore entities
+    this.entityManager.deserialize(save.entities);
+
+    // Initialize fog of war
+    const playerIds = Array.from(this.state.players.keys()) as number[];
+    this.fogOfWar.init(save.map.width, save.map.height, playerIds);
+
+    // Initialize resource system
+    this.resourceSystem.init(playerIds);
+
+    // Restore AI
+    for (const [id, player] of this.state.players) {
+      if (player.isAI) {
+        const diffMap: Record<number, 'easy' | 'moderate' | 'hard' | 'hardest'> = {
+          0: 'easy', 1: 'easy', 2: 'moderate', 3: 'hard', 4: 'hardest', 5: 'hardest'
+        };
+        this.aiController.registerAI(id, diffMap[player.aiDifficulty ?? 2] ?? 'moderate');
+      }
+    }
+
+    // Setup HUD
+    this.hudManager.init();
+
+    // Center camera on player TC
+    const p1Spawn = save.map.startPositions?.[0] as Vec2 | undefined;
+    if (p1Spawn) {
+      const isoX = (p1Spawn.x - p1Spawn.y) * (TILE_SIZE / 2);
+      const isoY = (p1Spawn.x + p1Spawn.y) * (TILE_SIZE / 4);
+      this.renderer.camera.x = isoX;
+      this.renderer.camera.y = isoY;
+      this.renderer.camera.targetX = isoX;
+      this.renderer.camera.targetY = isoY;
+    }
+
+    this.fogOfWar.forceUpdate();
+
+    // Start game loop
+    this.running = true;
+    this.lastTime = performance.now();
+    this.accumulator = 0;
+    this.gameLoop(this.lastTime);
+
+    this.audioManager.startBackgroundMusic();
+    this.audioManager.startAmbientSounds();
+
+    console.log('Game restored from save');
   }
 
   private spawnStartingUnits(rng: SeededRandom): void {
@@ -439,6 +519,10 @@ export class Game {
         break;
       case CommandType.Chat:
         if (cmd.message) {
+          // Check for cheat codes first
+          if (cmd.playerId === this.localPlayerId && this.processCheatCode(cmd.message)) {
+            break; // cheat was processed, don't show in chat
+          }
           const player = this.state.players.get(cmd.playerId);
           const name = player?.name ?? 'Unknown';
           const color = '#' + (player?.color ?? 0xffffff).toString(16).padStart(6, '0');
@@ -446,6 +530,120 @@ export class Game {
           this.audioManager?.play('chat');
         }
         break;
+    }
+  }
+
+  private processCheatCode(message: string): boolean {
+    const cmd = message.trim().toLowerCase();
+    const player = this.state.players.get(this.localPlayerId);
+    if (!player) return false;
+
+    switch (cmd) {
+      case 'marco':
+        // Reveal entire map
+        this.fogOfWar.revealAll(this.localPlayerId);
+        this.hudManager.showNotification('🗺️ Map revealed!', '#f4d03f');
+        return true;
+
+      case 'polo':
+        // Remove fog of war reveal (re-compute)
+        this.fogOfWar.forceUpdate();
+        this.hudManager.showNotification('🌫️ Fog restored', '#95a5a6');
+        return true;
+
+      case 'cheese steak jimmys':
+      case 'food':
+        player.resources.food += 10000;
+        this.hudManager.showNotification('🍖 +10000 Food', '#e74c3c');
+        return true;
+
+      case 'lumberjack':
+      case 'wood':
+        player.resources.wood += 10000;
+        this.hudManager.showNotification('🪵 +10000 Wood', '#27ae60');
+        return true;
+
+      case 'robin hood':
+      case 'gold':
+        player.resources.gold += 10000;
+        this.hudManager.showNotification('🪙 +10000 Gold', '#f4d03f');
+        return true;
+
+      case 'rock on':
+      case 'stone':
+        player.resources.stone += 10000;
+        this.hudManager.showNotification('🪨 +10000 Stone', '#95a5a6');
+        return true;
+
+      case 'ninjalui':
+      case 'all resources':
+        player.resources.food += 10000;
+        player.resources.wood += 10000;
+        player.resources.gold += 10000;
+        player.resources.stone += 10000;
+        this.hudManager.showNotification('💰 +10000 All Resources', '#f4d03f');
+        return true;
+
+      case 'aegis':
+        // Instant build/train
+        this.state.gameSpeed = this.state.gameSpeed >= 10 ? 1.0 : 50.0;
+        this.hudManager.showNotification(
+          this.state.gameSpeed >= 10 ? '⚡ Hyper speed ON' : '⏱️ Normal speed', '#d4a944'
+        );
+        return true;
+
+      case 'how do you turn this on':
+        // Spawn powerful unit at TC
+        const tc = this.entityManager.getBuildingsByType('townCenter', this.localPlayerId);
+        if (tc.length > 0) {
+          const pos = this.entityManager.getPosition(tc[0]);
+          if (pos) {
+            for (let i = 0; i < 5; i++) {
+              this.entityManager.createUnit('paladin', this.localPlayerId, pos.x + i * 2, pos.y + 2);
+            }
+            player.militaryUnits.push(...this.entityManager.getBuildingsByType('townCenter', this.localPlayerId));
+            this.hudManager.showNotification('🐎 5 Paladins spawned!', '#d4a944');
+          }
+        }
+        return true;
+
+      case 'i r winner':
+      case 'win':
+        this.gameOver(this.localPlayerId);
+        return true;
+
+      case 'resign':
+        this.playerDefeated(this.localPlayerId);
+        return true;
+
+      case 'woof woof':
+        // Spawn 10 villagers
+        const tcs = this.entityManager.getBuildingsByType('townCenter', this.localPlayerId);
+        if (tcs.length > 0) {
+          const pos = this.entityManager.getPosition(tcs[0]);
+          if (pos) {
+            for (let i = 0; i < 10; i++) {
+              const angle = (i / 10) * Math.PI * 2;
+              this.entityManager.createUnit('villager', this.localPlayerId,
+                pos.x + Math.cos(angle) * 4, pos.y + Math.sin(angle) * 4);
+            }
+            this.hudManager.showNotification('👷 10 Villagers spawned!', '#e0c070');
+          }
+        }
+        return true;
+
+      case 'speed':
+        this.state.gameSpeed = Math.min(5, this.state.gameSpeed + 0.5);
+        this.hudManager.showNotification(`⏩ Speed: ${this.state.gameSpeed}x`, '#d4a944');
+        return true;
+
+      case 'slow':
+        this.state.gameSpeed = Math.max(0.5, this.state.gameSpeed - 0.5);
+        this.hudManager.showNotification(`⏪ Speed: ${this.state.gameSpeed}x`, '#d4a944');
+        return true;
+
+      default:
+        return false;
     }
   }
 

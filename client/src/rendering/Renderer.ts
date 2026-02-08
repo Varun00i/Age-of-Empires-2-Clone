@@ -1119,6 +1119,8 @@ export class Renderer {
 
     this.animTime += 16;
     this.dayNightTime += 0.0001;
+
+    // Only clear the visible area
     this.ctx.clearRect(0, 0, this.width, this.height);
 
     // Smooth camera interpolation
@@ -1135,6 +1137,9 @@ export class Renderer {
 
     // Render terrain
     this.renderTerrain();
+    
+    // Render terrain decorations (flowers, rocks, grass tufts)
+    this.renderTerrainDecorations();
 
     // Render resources on map
     this.renderMapResources();
@@ -1252,6 +1257,154 @@ export class Renderer {
     this.ctx.fill();
   }
 
+  // Deterministic pseudo-random from tile coords
+  private tileHash(x: number, y: number, seed: number = 0): number {
+    let h = (x * 374761393 + y * 668265263 + seed * 2147483647) | 0;
+    h = ((h ^ (h >> 13)) * 1274126177) | 0;
+    return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+  }
+
+  private renderTerrainDecorations(): void {
+    // Skip decorations when zoomed out too far (performance)
+    if (this.camera.zoom < 0.5) return;
+    
+    const map = this.game.state.map;
+    if (!map) return;
+
+    const { startX, startY, endX, endY } = this.getVisibleTileRange();
+    const ctx = this.ctx;
+
+    for (let y = startY; y <= endY; y++) {
+      for (let x = startX; x <= endX; x++) {
+        if (x < 0 || x >= map.width || y < 0 || y >= map.height) continue;
+        const tile = map.tiles[y]?.[x];
+        if (!tile) continue;
+
+        const fogState = this.game.fogOfWar.getTileVisibility(x, y, this.game.localPlayerId);
+        if (fogState === 0) continue;
+
+        // Only decorate certain terrain types
+        const terrain = tile.terrain;
+        if (terrain !== TerrainType.Grass && terrain !== TerrainType.Dirt &&
+            terrain !== TerrainType.Sand && terrain !== TerrainType.Snow) continue;
+
+        // Skip tiles that already have resources
+        if (tile.resourceType && tile.resourceAmount) continue;
+
+        const screenX = (x - y) * (this.ISO_W / 2);
+        const screenY = (x + y) * (this.ISO_H / 2);
+        const rng = this.tileHash(x, y);
+
+        // ~30% of tiles get a decoration
+        if (rng > 0.3) continue;
+
+        const decType = this.tileHash(x, y, 1);
+        const offsetX = (this.tileHash(x, y, 2) - 0.5) * 16;
+        const offsetY = (this.tileHash(x, y, 3) - 0.5) * 8;
+        const dx = screenX + offsetX;
+        const dy = screenY + offsetY;
+
+        ctx.globalAlpha = fogState === 1 ? 0.4 : 1;
+
+        if (terrain === TerrainType.Grass) {
+          if (decType < 0.25) {
+            // Flower cluster
+            const colors = ['#e74c3c', '#f1c40f', '#e67e22', '#9b59b6', '#3498db', '#ffffff'];
+            const flowerColor = colors[Math.floor(this.tileHash(x, y, 4) * colors.length)];
+            // Stem
+            ctx.strokeStyle = '#2d5a1e';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(dx, dy); ctx.lineTo(dx, dy - 4);
+            ctx.stroke();
+            // Petal
+            ctx.fillStyle = flowerColor;
+            ctx.beginPath();
+            ctx.arc(dx, dy - 5, 2, 0, Math.PI * 2);
+            ctx.fill();
+            // Center
+            ctx.fillStyle = '#f4d03f';
+            ctx.beginPath();
+            ctx.arc(dx, dy - 5, 0.8, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (decType < 0.5) {
+            // Grass tuft
+            ctx.strokeStyle = '#5a9a3a';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(dx - 2, dy); ctx.lineTo(dx - 3, dy - 5);
+            ctx.moveTo(dx, dy); ctx.lineTo(dx, dy - 6);
+            ctx.moveTo(dx + 2, dy); ctx.lineTo(dx + 3, dy - 5);
+            ctx.stroke();
+          } else if (decType < 0.7) {
+            // Small mushroom
+            ctx.fillStyle = '#8b6b4a';
+            ctx.fillRect(dx - 0.5, dy - 2, 1.5, 3);
+            ctx.fillStyle = '#c0392b';
+            ctx.beginPath();
+            ctx.arc(dx, dy - 3, 2.5, Math.PI, 0);
+            ctx.fill();
+            // White dots
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(dx - 1, dy - 3.5, 0.5, 0, Math.PI * 2);
+            ctx.arc(dx + 1, dy - 3, 0.5, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            // Small pebbles  
+            ctx.fillStyle = '#7f8c8d';
+            ctx.beginPath();
+            ctx.arc(dx - 1, dy, 1.5, 0, Math.PI * 2);
+            ctx.arc(dx + 2, dy + 1, 1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (terrain === TerrainType.Dirt) {
+          if (decType < 0.4) {
+            // Small rock
+            ctx.fillStyle = '#6d6d6d';
+            ctx.beginPath();
+            ctx.arc(dx, dy, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8a8a8a';
+            ctx.beginPath();
+            ctx.arc(dx - 0.5, dy - 0.5, 1, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            // Dry twig
+            ctx.strokeStyle = '#6b4e2f';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(dx - 3, dy + 1); ctx.lineTo(dx + 3, dy - 1);
+            ctx.moveTo(dx, dy); ctx.lineTo(dx + 1, dy - 3);
+            ctx.stroke();
+          }
+        } else if (terrain === TerrainType.Sand) {
+          if (decType < 0.3) {
+            // Cactus
+            ctx.fillStyle = '#1e8449';
+            ctx.fillRect(dx - 1, dy - 5, 2.5, 6);
+            ctx.fillRect(dx - 4, dy - 3, 3, 2);
+            ctx.fillRect(dx + 1.5, dy - 4, 3, 2);
+          } else {
+            // Desert scrub
+            ctx.fillStyle = '#7d6608';
+            ctx.beginPath();
+            ctx.arc(dx, dy - 1, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (terrain === TerrainType.Snow) {
+          // Snowdrift
+          ctx.fillStyle = 'rgba(240,240,255,0.5)';
+          ctx.beginPath();
+          ctx.ellipse(dx, dy, 4, 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
   private renderMapResources(): void {
     const map = this.game.state.map;
     if (!map) return;
@@ -1274,37 +1427,157 @@ export class Renderer {
         // Draw resource indicator
         let color = '#888888';
         switch (tile.terrain) {
-          case TerrainType.Forest:
-            // Draw detailed tree with trunk and layered canopy
-            this.ctx.fillStyle = '#3a2a10';
-            this.ctx.fillRect(screenX - 1, screenY - 4, 3, 10);
-            // Dark canopy layer
-            this.ctx.fillStyle = '#1a4a0e';
-            this.ctx.beginPath();
-            this.ctx.arc(screenX, screenY - 11, 9, 0, Math.PI * 2);
-            this.ctx.fill();
-            // Lighter highlight
-            this.ctx.fillStyle = '#2a6a1e';
-            this.ctx.beginPath();
-            this.ctx.arc(screenX - 2, screenY - 13, 5, 0, Math.PI * 2);
-            this.ctx.fill();
+          case TerrainType.Forest: {
+            // Varied trees based on tile position
+            const treeType = this.tileHash(x, y, 7);
+            const treeScale = 0.85 + this.tileHash(x, y, 8) * 0.3;
+            const swayOffset = Math.sin(this.animTime * 0.001 + x * 2.3 + y * 1.7) * 0.8;
+            const tx = screenX + swayOffset;
+            if (treeType < 0.35) {
+              // Oak - round canopy
+              this.ctx.fillStyle = '#3a2a10';
+              this.ctx.fillRect(tx - 1, screenY - 4, 3, 10);
+              this.ctx.fillStyle = '#1a4a0e';
+              this.ctx.beginPath();
+              this.ctx.arc(tx, screenY - 11 * treeScale, 9 * treeScale, 0, Math.PI * 2);
+              this.ctx.fill();
+              this.ctx.fillStyle = '#2a6a1e';
+              this.ctx.beginPath();
+              this.ctx.arc(tx - 2, screenY - 13 * treeScale, 5 * treeScale, 0, Math.PI * 2);
+              this.ctx.fill();
+            } else if (treeType < 0.6) {
+              // Pine - triangular
+              this.ctx.fillStyle = '#4a3218';
+              this.ctx.fillRect(tx - 1, screenY - 2, 2.5, 8);
+              this.ctx.fillStyle = '#1a5a16';
+              this.ctx.beginPath();
+              this.ctx.moveTo(tx, screenY - 20 * treeScale);
+              this.ctx.lineTo(tx + 7 * treeScale, screenY - 2);
+              this.ctx.lineTo(tx - 7 * treeScale, screenY - 2);
+              this.ctx.closePath();
+              this.ctx.fill();
+              this.ctx.fillStyle = '#237a21';
+              this.ctx.beginPath();
+              this.ctx.moveTo(tx, screenY - 16 * treeScale);
+              this.ctx.lineTo(tx + 5 * treeScale, screenY - 4);
+              this.ctx.lineTo(tx - 5 * treeScale, screenY - 4);
+              this.ctx.closePath();
+              this.ctx.fill();
+            } else if (treeType < 0.8) {
+              // Birch - slim white trunk with small canopy
+              this.ctx.fillStyle = '#ddd';
+              this.ctx.fillRect(tx - 0.8, screenY - 6, 2, 12);
+              this.ctx.fillStyle = '#444';
+              for (let i = 0; i < 3; i++) {
+                this.ctx.fillRect(tx - 0.5, screenY - 4 + i * 3, 1.5, 0.8);
+              }
+              this.ctx.fillStyle = '#50a030';
+              this.ctx.beginPath();
+              this.ctx.arc(tx, screenY - 10 * treeScale, 6 * treeScale, 0, Math.PI * 2);
+              this.ctx.fill();
+              this.ctx.fillStyle = '#70c050';
+              this.ctx.beginPath();
+              this.ctx.arc(tx + 2, screenY - 12 * treeScale, 4 * treeScale, 0, Math.PI * 2);
+              this.ctx.fill();
+            } else {
+              // Palm (for tropical/coastal)
+              this.ctx.strokeStyle = '#6b4e2f';
+              this.ctx.lineWidth = 2;
+              this.ctx.beginPath();
+              this.ctx.moveTo(tx, screenY + 4);
+              this.ctx.quadraticCurveTo(tx + 2, screenY - 8, tx + 1, screenY - 14 * treeScale);
+              this.ctx.stroke();
+              // Fronds
+              this.ctx.fillStyle = '#2a8a1e';
+              for (let f = 0; f < 5; f++) {
+                const angle = (f / 5) * Math.PI * 2 - Math.PI * 0.3;
+                const fx = tx + 1 + Math.cos(angle) * 8;
+                const fy = screenY - 14 * treeScale + Math.sin(angle) * 4;
+                this.ctx.beginPath();
+                this.ctx.ellipse(fx, fy, 5, 1.5, angle, 0, Math.PI * 2);
+                this.ctx.fill();
+              }
+            }
             break;
+          }
           default:
-            // Gold / stone patches with layered stones
-            color = tile.resourceType === 'gold' ? '#f4d03f' : '#95a5a6';
-            const highlight = tile.resourceType === 'gold' ? '#ffe680' : '#bdc3c7';
-            this.ctx.fillStyle = color;
-            this.ctx.beginPath();
-            this.ctx.arc(screenX - 2, screenY - 2, 5, 0, Math.PI * 2);
-            this.ctx.fill();
-            this.ctx.fillStyle = highlight;
-            this.ctx.beginPath();
-            this.ctx.arc(screenX + 3, screenY - 4, 3.5, 0, Math.PI * 2);
-            this.ctx.fill();
-            this.ctx.fillStyle = color + 'b0';
-            this.ctx.beginPath();
-            this.ctx.arc(screenX + 1, screenY + 1, 3, 0, Math.PI * 2);
-            this.ctx.fill();
+            if (tile.resourceType === 'food') {
+              // Berry bush: green bush with red/purple berries
+              if (tile.resourceAmount >= 300) {
+                // Large food (boar) - brown animal shape
+                this.ctx.fillStyle = '#5a4020';
+                this.ctx.beginPath();
+                this.ctx.ellipse(screenX, screenY - 3, 7, 4, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#4a3018';
+                this.ctx.beginPath();
+                this.ctx.ellipse(screenX + 5, screenY - 5, 3, 2.5, 0.3, 0, Math.PI * 2);
+                this.ctx.fill();
+                // Tusks
+                this.ctx.strokeStyle = '#eee';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.moveTo(screenX + 7, screenY - 5);
+                this.ctx.lineTo(screenX + 9, screenY - 7);
+                this.ctx.stroke();
+              } else if (tile.resourceAmount >= 130) {
+                // Deer - tan animal shape
+                this.ctx.fillStyle = '#b89060';
+                this.ctx.beginPath();
+                this.ctx.ellipse(screenX, screenY - 3, 5, 3, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#a08050';
+                this.ctx.beginPath();
+                this.ctx.ellipse(screenX + 4, screenY - 5, 2, 1.8, 0.2, 0, Math.PI * 2);
+                this.ctx.fill();
+                // Antlers
+                this.ctx.strokeStyle = '#6b5030';
+                this.ctx.lineWidth = 1;
+                this.ctx.beginPath();
+                this.ctx.moveTo(screenX + 5, screenY - 6);
+                this.ctx.lineTo(screenX + 7, screenY - 10);
+                this.ctx.lineTo(screenX + 9, screenY - 9);
+                this.ctx.moveTo(screenX + 7, screenY - 10);
+                this.ctx.lineTo(screenX + 6, screenY - 12);
+                this.ctx.stroke();
+              } else {
+                // Berry bush - green with colorful berries
+                this.ctx.fillStyle = '#2a7a1e';
+                this.ctx.beginPath();
+                this.ctx.arc(screenX, screenY - 4, 6, 0, Math.PI * 2);
+                this.ctx.fill();
+                this.ctx.fillStyle = '#3a8a2e';
+                this.ctx.beginPath();
+                this.ctx.arc(screenX - 2, screenY - 6, 4, 0, Math.PI * 2);
+                this.ctx.fill();
+                // Berries
+                const berryColors = ['#c0392b', '#8e44ad', '#e74c3c', '#9b59b6'];
+                for (let b = 0; b < 5; b++) {
+                  const bx = screenX + Math.cos(b * 1.3) * 3.5;
+                  const by = screenY - 4 + Math.sin(b * 1.7) * 3;
+                  this.ctx.fillStyle = berryColors[b % berryColors.length];
+                  this.ctx.beginPath();
+                  this.ctx.arc(bx, by, 1.5, 0, Math.PI * 2);
+                  this.ctx.fill();
+                }
+              }
+            } else {
+              // Gold / stone patches with layered stones
+              color = tile.resourceType === 'gold' ? '#f4d03f' : '#95a5a6';
+              const highlight = tile.resourceType === 'gold' ? '#ffe680' : '#bdc3c7';
+              this.ctx.fillStyle = color;
+              this.ctx.beginPath();
+              this.ctx.arc(screenX - 2, screenY - 2, 5, 0, Math.PI * 2);
+              this.ctx.fill();
+              this.ctx.fillStyle = highlight;
+              this.ctx.beginPath();
+              this.ctx.arc(screenX + 3, screenY - 4, 3.5, 0, Math.PI * 2);
+              this.ctx.fill();
+              this.ctx.fillStyle = color + 'b0';
+              this.ctx.beginPath();
+              this.ctx.arc(screenX + 1, screenY + 1, 3, 0, Math.PI * 2);
+              this.ctx.fill();
+            }
             break;
         }
       }
@@ -1343,11 +1616,10 @@ export class Renderer {
         this.ctx.fillRect(screenX - sprite.width / 2, screenY - sprite.height / 2, sprite.width, sprite.height);
         this.ctx.restore();
       } else {
-        // Fallback rectangle
+        // Procedural building based on type
         const size = (stats.size?.x ?? 2) * 12;
-        this.ctx.fillStyle = playerColor;
         this.ctx.globalAlpha = fogState === 1 ? 0.6 : 1.0;
-        this.ctx.fillRect(screenX - size / 2, screenY - size, size, size);
+        this.drawProceduralBuilding(screenX, screenY, size, stats.id, playerColor);
         this.ctx.globalAlpha = 1;
       }
 
@@ -1374,6 +1646,160 @@ export class Renderer {
     }
   }
 
+  private drawProceduralBuilding(x: number, y: number, size: number, buildingId: string, color: string): void {
+    const ctx = this.ctx;
+    const s = size;
+    const half = s / 2;
+
+    if (buildingId === 'townCenter') {
+      // Large stone building with tower
+      ctx.fillStyle = '#5a4a3a';
+      ctx.fillRect(x - half, y - s, s, s);
+      // Stone border
+      ctx.fillStyle = '#6b5b4b';
+      ctx.fillRect(x - half, y - s, s, 3);
+      ctx.fillRect(x - half, y - 3, s, 3);
+      // Central tower
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(x - 4, y - s - 12, 8, 15);
+      // Tower top
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, y - s - 18);
+      ctx.lineTo(x + 6, y - s - 10);
+      ctx.lineTo(x - 6, y - s - 10);
+      ctx.closePath();
+      ctx.fill();
+      // Door
+      ctx.fillStyle = '#2a1a0a';
+      ctx.fillRect(x - 3, y - 8, 6, 8);
+      // Flag
+      ctx.strokeStyle = '#555';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y - s - 18);
+      ctx.lineTo(x, y - s - 25);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y - s - 25, 6, 4);
+    } else if (buildingId === 'house') {
+      // Small house
+      ctx.fillStyle = '#8b7355';
+      ctx.fillRect(x - half, y - s + 4, s, s - 4);
+      // Roof
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x, y - s - 5);
+      ctx.lineTo(x + half + 2, y - s + 5);
+      ctx.lineTo(x - half - 2, y - s + 5);
+      ctx.closePath();
+      ctx.fill();
+      // Door
+      ctx.fillStyle = '#3a2a15';
+      ctx.fillRect(x - 2, y - 5, 4, 5);
+      // Window
+      ctx.fillStyle = '#d4c060';
+      ctx.fillRect(x + 3, y - s + 8, 3, 3);
+    } else if (buildingId === 'barracks' || buildingId === 'stable' || buildingId === 'archeryRange') {
+      // Military building with flag
+      ctx.fillStyle = '#6b5b4b';
+      ctx.fillRect(x - half, y - s + 2, s, s - 2);
+      // Roof stripe in player color
+      ctx.fillStyle = color;
+      ctx.fillRect(x - half, y - s + 2, s, 4);
+      // Door frame
+      ctx.fillStyle = '#2a1a0a';
+      ctx.fillRect(x - 4, y - 10, 8, 10);
+      ctx.fillStyle = '#4a3a2a';
+      ctx.fillRect(x - 5, y - 11, 10, 2);
+      // Weapon rack symbol
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1;
+      if (buildingId === 'barracks') {
+        // Crossed swords
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y - s + 9); ctx.lineTo(x + 3, y - s + 15);
+        ctx.moveTo(x + 3, y - s + 9); ctx.lineTo(x - 3, y - s + 15);
+        ctx.stroke();
+      } else if (buildingId === 'archeryRange') {
+        // Bow shape
+        ctx.beginPath();
+        ctx.arc(x + half - 4, y - half, 5, -Math.PI * 0.4, Math.PI * 0.4);
+        ctx.stroke();
+      } else {
+        // Horseshoe
+        ctx.beginPath();
+        ctx.arc(x + half - 4, y - half, 4, Math.PI, 0);
+        ctx.stroke();
+      }
+    } else if (buildingId === 'farm') {
+      // Farm - brown soil with green crops
+      ctx.fillStyle = '#7a6040';
+      ctx.fillRect(x - half, y - half, s, s / 2);
+      ctx.fillStyle = '#5a9a3a';
+      for (let r = 0; r < 3; r++) {
+        ctx.fillRect(x - half + 2, y - half + 2 + r * 4, s - 4, 2);
+      }
+    } else if (buildingId === 'mill' || buildingId === 'lumberCamp' || buildingId === 'miningCamp') {
+      // Resource drop-off building
+      ctx.fillStyle = '#7b6345';
+      ctx.fillRect(x - half, y - s + 4, s, s - 4);
+      ctx.fillStyle = '#6b5335';
+      ctx.fillRect(x - half - 1, y - s + 3, s + 2, 3);
+      // Differentiate by resource icon
+      ctx.fillStyle = '#ddd';
+      ctx.font = `${Math.floor(s * 0.5)}px serif`;
+      ctx.textAlign = 'center';
+      if (buildingId === 'mill') ctx.fillText('🌾', x, y - half + 2);
+      else if (buildingId === 'lumberCamp') ctx.fillText('🪓', x, y - half + 2);
+      else ctx.fillText('⛏️', x, y - half + 2);
+    } else if (buildingId === 'castle') {
+      // Castle with towers
+      ctx.fillStyle = '#555';
+      ctx.fillRect(x - half, y - s, s, s);
+      // Corner towers
+      ctx.fillStyle = '#666';
+      const tw = 5;
+      ctx.fillRect(x - half - 1, y - s - 4, tw, s + 4);
+      ctx.fillRect(x + half - tw + 1, y - s - 4, tw, s + 4);
+      // Crenellations
+      ctx.fillStyle = '#666';
+      for (let i = 0; i < 4; i++) {
+        ctx.fillRect(x - half + 2 + i * (s / 4), y - s - 3, 3, 3);
+      }
+      // Player color banner
+      ctx.fillStyle = color;
+      ctx.fillRect(x - 2, y - s - 10, 4, 8);
+      ctx.strokeStyle = '#444';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y - s - 10);
+      ctx.lineTo(x, y - s - 14);
+      ctx.stroke();
+    } else if (buildingId === 'wall' || buildingId === 'gate' || buildingId === 'stoneWall') {
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x - half, y - 8, s, 8);
+      ctx.fillStyle = '#888';
+      ctx.fillRect(x - half, y - 10, s, 2);
+    } else if (buildingId === 'market') {
+      ctx.fillStyle = '#8a7a5a';
+      ctx.fillRect(x - half, y - s + 4, s, s - 4);
+      // Awning
+      ctx.fillStyle = '#c0392b';
+      ctx.fillRect(x - half - 2, y - s + 3, (s + 4) / 2, 3);
+      ctx.fillStyle = '#f1c40f';
+      ctx.fillRect(x, y - s + 3, (s + 4) / 2, 3);
+    } else {
+      // Generic building
+      ctx.fillStyle = '#6b5b4b';
+      ctx.fillRect(x - half, y - s, s, s);
+      ctx.fillStyle = color;
+      ctx.fillRect(x - half, y - s, s, 3);
+      ctx.fillStyle = '#2a1a0a';
+      ctx.fillRect(x - 3, y - 7, 6, 7);
+    }
+  }
+
   private renderUnits(alpha: number): void {
     const entities = this.game.entityManager.getAllUnits();
 
@@ -1395,9 +1821,46 @@ export class Renderer {
       if (fogState === 0) continue;
       if (fogState === 1 && entity.owner !== this.game.localPlayerId) continue;
 
-      const screenX = (pos.x - pos.y) * (this.ISO_W / 2);
-      const screenY = (pos.x + pos.y) * (this.ISO_H / 2);
+      // Interpolate position for smooth movement
+      const lerpX = pos.prevX + (pos.x - pos.prevX) * alpha;
+      const lerpY = pos.prevY + (pos.y - pos.prevY) * alpha;
+      const screenX = (lerpX - lerpY) * (this.ISO_W / 2);
+      const screenY = (lerpX + lerpY) * (this.ISO_H / 2);
       const playerColor = this.getPlayerColorHex(entity.owner);
+
+      const state = this.game.entityManager.getUnitState(entity.id);
+      const unitComp = this.game.entityManager.getUnitComponent(entity.id);
+
+      // Animation offsets based on state
+      let bobY = 0;
+      let scaleX = 1;
+      let swingAngle = 0;
+
+      if (state === 'moving') {
+        // Walking bob animation
+        bobY = Math.sin(this.animTime * 0.012 + entity.id * 3.7) * 2;
+      } else if (state === 'gathering') {
+        // Gathering swing animation
+        swingAngle = Math.sin(this.animTime * 0.008 + entity.id) * 0.15;
+        bobY = Math.abs(Math.sin(this.animTime * 0.008 + entity.id)) * -1.5;
+      } else if (state === 'attacking') {
+        // Attack lunge
+        bobY = Math.sin(this.animTime * 0.015 + entity.id) * 1.5;
+        swingAngle = Math.sin(this.animTime * 0.015 + entity.id) * 0.2;
+      } else if (state === 'idle') {
+        // Subtle breathing
+        bobY = Math.sin(this.animTime * 0.003 + entity.id * 2.1) * 0.5;
+      }
+
+      // Facing direction (flip sprite)
+      if (unitComp) {
+        const dx = pos.x - pos.prevX;
+        const dy = pos.y - pos.prevY;
+        if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+          const isoDx = (dx - dy);
+          scaleX = isoDx < 0 ? -1 : 1;
+        }
+      }
 
       // Draw shadow
       this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
@@ -1405,22 +1868,27 @@ export class Renderer {
       this.ctx.ellipse(screenX, screenY + 2, 6, 3, 0, 0, Math.PI * 2);
       this.ctx.fill();
 
-      // Draw unit sprite
+      // Draw unit sprite with animation
       const sprite = this.unitSprites.get(unitData.id);
       if (sprite) {
-        this.ctx.drawImage(sprite, screenX - sprite.width / 2, screenY - sprite.height / 2 - 4);
+        this.ctx.save();
+        this.ctx.translate(screenX, screenY - 4 + bobY);
+        if (swingAngle !== 0) this.ctx.rotate(swingAngle);
+        this.ctx.scale(scaleX, 1);
+        this.ctx.drawImage(sprite, -sprite.width / 2, -sprite.height / 2);
+        this.ctx.restore();
       } else {
         // Fallback circle
         this.ctx.fillStyle = playerColor;
         this.ctx.beginPath();
-        this.ctx.arc(screenX, screenY - 4, 5, 0, Math.PI * 2);
+        this.ctx.arc(screenX, screenY - 4 + bobY, 5, 0, Math.PI * 2);
         this.ctx.fill();
       }
 
       // Player color indicator dot
       this.ctx.fillStyle = playerColor;
       this.ctx.beginPath();
-      this.ctx.arc(screenX, screenY - 14, 2, 0, Math.PI * 2);
+      this.ctx.arc(screenX, screenY - 14 + bobY, 2, 0, Math.PI * 2);
       this.ctx.fill();
 
       // HP bar
@@ -1430,9 +1898,9 @@ export class Renderer {
         const barWidth = 20;
         const hpRatio = hp / maxHP;
         this.ctx.fillStyle = '#333';
-        this.ctx.fillRect(screenX - barWidth / 2, screenY - 18, barWidth, 2);
+        this.ctx.fillRect(screenX - barWidth / 2, screenY - 18 + bobY, barWidth, 2);
         this.ctx.fillStyle = hpRatio > 0.6 ? '#27ae60' : hpRatio > 0.3 ? '#f39c12' : '#e74c3c';
-        this.ctx.fillRect(screenX - barWidth / 2, screenY - 18, barWidth * hpRatio, 2);
+        this.ctx.fillRect(screenX - barWidth / 2, screenY - 18 + bobY, barWidth * hpRatio, 2);
       }
 
       // Selection ring
@@ -1444,23 +1912,31 @@ export class Renderer {
         this.ctx.stroke();
       }
 
-      // Gathering animation
-      const state = this.game.entityManager.getUnitState(entity.id);
+      // Gathering particle effect
       if (state === 'gathering') {
         const pulse = Math.sin(this.animTime * 0.005) * 0.3 + 0.7;
-        this.ctx.fillStyle = `rgba(255, 255, 0, ${pulse * 0.3})`;
+        this.ctx.fillStyle = `rgba(255, 255, 0, ${pulse * 0.15})`;
         this.ctx.beginPath();
-        this.ctx.arc(screenX, screenY - 4, 8, 0, Math.PI * 2);
+        this.ctx.arc(screenX, screenY - 4 + bobY, 10, 0, Math.PI * 2);
         this.ctx.fill();
+        // Tiny resource particles
+        for (let p = 0; p < 2; p++) {
+          const px = screenX + Math.sin(this.animTime * 0.007 + p * 2) * 6;
+          const py = screenY - 6 + bobY + Math.cos(this.animTime * 0.009 + p * 3) * 4;
+          this.ctx.fillStyle = `rgba(255, 200, 0, ${pulse * 0.4})`;
+          this.ctx.beginPath();
+          this.ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+          this.ctx.fill();
+        }
       }
 
-      // Attack animation
+      // Attack flash effect
       if (state === 'attacking') {
         const flash = Math.sin(this.animTime * 0.01) > 0;
         if (flash) {
-          this.ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+          this.ctx.fillStyle = 'rgba(255, 50, 0, 0.2)';
           this.ctx.beginPath();
-          this.ctx.arc(screenX, screenY - 4, 10, 0, Math.PI * 2);
+          this.ctx.arc(screenX, screenY - 4 + bobY, 12, 0, Math.PI * 2);
           this.ctx.fill();
         }
       }
@@ -1510,8 +1986,15 @@ export class Renderer {
     }
   }
 
+  // Minimap frame counter for throttling
+  private minimapFrameCounter: number = 0;
+
   private renderMinimap(): void {
     if (!this.minimapCtx || !this.game.state?.map) return;
+
+    // Only redraw minimap every 3 frames for performance
+    this.minimapFrameCounter++;
+    if (this.minimapFrameCounter % 3 !== 0) return;
 
     const map = this.game.state.map;
     const mw = this.minimapCanvas.width;
@@ -1573,12 +2056,25 @@ export class Renderer {
   }
 
   private renderDebugInfo(): void {
+    // FPS counter at top-right
     this.ctx.save();
-    this.ctx.fillStyle = '#0f0';
-    this.ctx.font = '12px monospace';
-    this.ctx.fillText(`FPS: ${this.game.fps}`, 10, this.height - 10);
-    this.ctx.fillText(`Entities: ${this.game.entityManager.getEntityCount()}`, 100, this.height - 10);
-    this.ctx.fillText(`Tick: ${this.game.state?.tick ?? 0}`, 220, this.height - 10);
+    this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    this.ctx.fillRect(this.width - 130, 8, 122, 50);
+    this.ctx.strokeStyle = '#3a3a3a';
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(this.width - 130, 8, 122, 50);
+
+    this.ctx.font = 'bold 16px monospace';
+    const fpsColor = this.game.fps >= 50 ? '#00ff66' : this.game.fps >= 30 ? '#ffcc00' : '#ff4444';
+    this.ctx.fillStyle = fpsColor;
+    this.ctx.textAlign = 'right';
+    this.ctx.fillText(`FPS: ${this.game.fps}`, this.width - 16, 28);
+
+    this.ctx.font = '11px monospace';
+    this.ctx.fillStyle = '#aaa';
+    this.ctx.fillText(`Entities: ${this.game.entityManager.getEntityCount()}`, this.width - 16, 42);
+    this.ctx.fillText(`Tick: ${this.game.state?.tick ?? 0}`, this.width - 16, 54);
+    this.ctx.textAlign = 'left';
     this.ctx.restore();
   }
 

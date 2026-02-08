@@ -572,6 +572,85 @@ export class EntityManager {
     }
   }
 
+  // ---- Serialization ----
+
+  serialize(): any {
+    const entitiesArr: any[] = [];
+    for (const [id, base] of this.entities) {
+      const entry: any = { id, owner: base.owner, type: base.type };
+      const pos = this.positions.get(id);
+      if (pos) entry.pos = { x: pos.x, y: pos.y };
+      const hp = this.health.get(id);
+      if (hp) entry.hp = { hp: hp.hp, maxHp: hp.maxHp };
+      const unit = this.units.get(id);
+      if (unit) {
+        entry.unit = {
+          unitId: unit.data.id,
+          state: unit.state,
+          carryAmount: unit.carryAmount,
+          carryType: unit.carryType,
+          facing: unit.facing,
+        };
+      }
+      const bld = this.buildings.get(id);
+      if (bld) {
+        entry.building = {
+          buildingId: bld.data.id,
+          buildProgress: bld.buildProgress,
+          isComplete: bld.isComplete,
+          farmFoodRemaining: bld.farmFoodRemaining,
+          trainingQueue: bld.trainingQueue,
+          researchQueue: bld.researchQueue,
+        };
+      }
+      const res = this.resources.get(id);
+      if (res) entry.resource = { resourceType: res.resourceType, amount: res.amount };
+      entitiesArr.push(entry);
+    }
+    return { nextEntityId: this.nextEntityId, entities: entitiesArr };
+  }
+
+  deserialize(data: any): void {
+    this.init();
+    this.nextEntityId = data.nextEntityId ?? 1;
+    for (const e of data.entities ?? []) {
+      this.entities.set(e.id, { id: e.id, owner: e.owner, type: e.type });
+      if (e.pos) this.positions.set(e.id, { x: e.pos.x, y: e.pos.y, prevX: e.pos.x, prevY: e.pos.y });
+      if (e.hp) this.health.set(e.id, { hp: e.hp.hp, maxHp: e.hp.maxHp });
+      if (e.unit) {
+        const unitData = UNITS[e.unit.unitId];
+        if (unitData) {
+          this.units.set(e.id, {
+            data: unitData, state: e.unit.state ?? 'idle',
+            targetId: null, targetPos: null, path: [], pathIndex: 0,
+            attackCooldown: 0, gatherCooldown: 0,
+            carryAmount: e.unit.carryAmount ?? 0, carryType: e.unit.carryType ?? null,
+            garrisonedIn: null, patrolPoints: [], patrolIndex: 0,
+            facing: e.unit.facing ?? 0,
+          });
+        }
+      }
+      if (e.building) {
+        const bldData = BUILDINGS[e.building.buildingId];
+        if (bldData) {
+          this.buildings.set(e.id, {
+            data: bldData,
+            buildProgress: e.building.buildProgress ?? 1,
+            isComplete: e.building.isComplete ?? true,
+            trainingQueue: e.building.trainingQueue ?? [],
+            researchQueue: e.building.researchQueue ?? [],
+            rallyPoint: null, garrisonedUnits: [],
+            farmFoodRemaining: e.building.farmFoodRemaining ?? 0,
+          });
+        }
+      }
+      if (e.resource) {
+        this.resources.set(e.id, { resourceType: e.resource.resourceType, amount: e.resource.amount });
+      }
+      if (e.pos) this.addToSpatialGrid(e.id, e.pos.x, e.pos.y);
+    }
+  }
+
   dispose(): void {
     this.entities.clear();
     this.positions.clear();

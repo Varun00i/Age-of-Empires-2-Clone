@@ -37,7 +37,8 @@ export class FogOfWar {
   }
 
   update(dt: number): void {
-    this.updateTimer += dt;
+    // dt is in seconds, convert to ms for comparison with UPDATE_INTERVAL
+    this.updateTimer += dt * 1000;
     if (this.updateTimer < this.UPDATE_INTERVAL) return;
     this.updateTimer = 0;
     this.computeVisibility();

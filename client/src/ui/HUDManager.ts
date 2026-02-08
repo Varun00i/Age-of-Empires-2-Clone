@@ -118,6 +118,7 @@ export class HUDManager {
     const em = this.game.entityManager;
     const unitData = em.getUnitData(entityId);
     const buildingData = em.getBuildingData(entityId);
+    const resourceData = em.getResourceComponent(entityId);
     const hp = em.getHP(entityId) ?? 0;
     const maxHP = em.getMaxHP(entityId) ?? 0;
     const owner = em.getOwner(entityId);
@@ -171,6 +172,25 @@ export class HUDManager {
       if (isOwn && building?.isComplete) {
         this.showBuildingActions(entityId, buildingData.id);
       }
+    } else if (resourceData) {
+      // Resource entity info
+      const resIcons: Record<string, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
+      const resNames: Record<string, string> = { food: 'Food', wood: 'Wood', gold: 'Gold', stone: 'Stone' };
+      const resColors: Record<string, string> = { food: '#e74c3c', wood: '#27ae60', gold: '#f4d03f', stone: '#95a5a6' };
+      const rType = resourceData.resourceType;
+      this.unitInfoEl.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <strong style="color:${resColors[rType] ?? '#f4d03f'};">${resIcons[rType] ?? '📦'} ${resNames[rType] ?? rType} Resource</strong>
+          <div style="font-size:12px;">
+            <span>Amount: ${resourceData.amount}</span>
+          </div>
+          <div style="background:#333;height:4px;border-radius:2px;">
+            <div style="background:${resColors[rType] ?? '#f4d03f'};height:100%;width:${Math.min(100, resourceData.amount / 8)}%;border-radius:2px;"></div>
+          </div>
+          <span style="font-size:10px;color:#888;">Right-click with villager to gather</span>
+        </div>
+      `;
+      this.actionGridEl.innerHTML = '';
     }
   }
 
@@ -368,6 +388,27 @@ export class HUDManager {
   }
 
   // ---- Build Menu ----
+
+  showTileResourceInfo(x: number, y: number, resType: string, amount: number): void {
+    if (!this.unitInfoEl) return;
+    const resIcons: Record<string, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
+    const resNames: Record<string, string> = { food: 'Food', wood: 'Wood', gold: 'Gold', stone: 'Stone' };
+    const resColors: Record<string, string> = { food: '#e74c3c', wood: '#27ae60', gold: '#f4d03f', stone: '#95a5a6' };
+    this.unitInfoEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <strong style="color:${resColors[resType] ?? '#f4d03f'};">${resIcons[resType] ?? '📦'} ${resNames[resType] ?? resType}</strong>
+        <div style="font-size:12px;">
+          <span>Amount: ${amount}</span>
+          <span style="color:#666;margin-left:8px;">Tile (${x}, ${y})</span>
+        </div>
+        <div style="background:#333;height:4px;border-radius:2px;">
+          <div style="background:${resColors[resType] ?? '#f4d03f'};height:100%;width:${Math.min(100, amount / 8)}%;border-radius:2px;"></div>
+        </div>
+        <span style="font-size:10px;color:#888;">Right-click with villager to gather</span>
+      </div>
+    `;
+    if (this.actionGridEl) this.actionGridEl.innerHTML = '';
+  }
 
   toggleBuildMenu(): void {
     // Show building categories

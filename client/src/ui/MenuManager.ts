@@ -33,6 +33,7 @@ interface SavedSettings {
   sfxVolume: number;
   scrollSpeed: number;
   fullscreen: boolean;
+  preventReload: boolean;
   keyBindings: Record<string, string>;
 }
 
@@ -74,6 +75,20 @@ export class MenuManager {
     // Apply saved settings
     this.applySettings();
     this.setupMainMenu();
+
+    // Auto-save on page unload
+    window.addEventListener('beforeunload', () => {
+      if (this.game.state && this.game.state.phase !== 3 /* GameOver */) {
+        this.saveGameState();
+      }
+    });
+
+    // Periodic auto-save every 60s
+    setInterval(() => {
+      if (this.game.state && this.game.running && this.game.state.phase === 1 /* Playing */) {
+        this.saveGameState();
+      }
+    }, 60000);
   }
 
   private loadSettings(): SavedSettings {
@@ -87,6 +102,7 @@ export class MenuManager {
       sfxVolume: 60,
       scrollSpeed: 10,
       fullscreen: false,
+      preventReload: true,
       keyBindings: { ...DEFAULT_KEY_BINDINGS },
     };
   }
@@ -100,6 +116,19 @@ export class MenuManager {
   private applySettings(): void {
     this.game.audioManager?.setMusicVolume(this.settings.musicVolume / 100);
     this.game.audioManager?.setSFXVolume(this.settings.sfxVolume / 100);
+    this.updateReloadPrevention();
+  }
+
+  private reloadHandler = (e: BeforeUnloadEvent) => {
+    e.preventDefault();
+    e.returnValue = '';
+  };
+
+  private updateReloadPrevention(): void {
+    window.removeEventListener('beforeunload', this.reloadHandler);
+    if (this.settings.preventReload) {
+      window.addEventListener('beforeunload', this.reloadHandler);
+    }
   }
 
   getKeyBindings(): Record<string, string> {
@@ -138,6 +167,7 @@ export class MenuManager {
         <div style="width:200px;height:2px;margin:0 auto 2rem;background:linear-gradient(90deg,transparent,var(--gold-dark),var(--gold),var(--gold-dark),transparent);"></div>
 
         <div id="menu-buttons" style="display:flex;flex-direction:column;align-items:center;gap:0;">
+          ${this.hasResumableGame() ? '<button id="btn-continue" class="menu-btn primary" style="border-color:#27ae60;text-shadow:0 0 10px rgba(39,174,96,0.5);">▶️ Continue Game</button>' : ''}
           <button id="btn-singleplayer" class="menu-btn primary">⚔️ Single Player</button>
           <button id="btn-multiplayer" class="menu-btn">🌐 Multiplayer</button>
           <button id="btn-mapeditor" class="menu-btn">🗺️ Map Editor</button>
@@ -160,6 +190,7 @@ export class MenuManager {
     document.getElementById('btn-settings')?.addEventListener('click', () => this.showSettings());
     document.getElementById('btn-keybindings')?.addEventListener('click', () => this.showKeyBindings());
     document.getElementById('btn-help')?.addEventListener('click', () => this.showHelp());
+    document.getElementById('btn-continue')?.addEventListener('click', () => this.loadSavedGame());
   }
 
   private showPanel(html: string): void {
@@ -344,10 +375,38 @@ export class MenuManager {
       const addr = (document.getElementById('server-addr') as HTMLInputElement)?.value;
       const name = (document.getElementById('player-name') as HTMLInputElement)?.value;
       const status = document.getElementById('mp-status');
+      const btn = document.getElementById('btn-connect') as HTMLButtonElement;
       if (addr && name) {
         localStorage.setItem('empires-player-name', name);
-        if (status) status.textContent = 'Connecting...';
+        if (status) {
+          status.textContent = '🔄 Connecting...';
+          status.style.color = '#f4d03f';
+        }
+        if (btn) btn.disabled = true;
+
         this.game.networkClient?.connect(addr, name);
+
+        // Poll for connection status with timeout
+        let elapsed = 0;
+        const pollInterval = setInterval(() => {
+          elapsed += 500;
+          if (this.game.networkClient?.connected) {
+            clearInterval(pollInterval);
+            if (status) {
+              status.textContent = '✅ Connected! Waiting for lobby...';
+              status.style.color = '#27ae60';
+            }
+            if (btn) { btn.disabled = false; btn.textContent = '✅ Connected'; }
+          } else if (elapsed >= 8000) {
+            clearInterval(pollInterval);
+            if (status) {
+              status.innerHTML = '❌ Connection failed. Server may be offline or address is incorrect.<br><span style="font-size:11px;color:#7f8c8d;">Tip: Make sure the server is running and the address includes ws:// or wss://</span>';
+              status.style.color = '#e74c3c';
+            }
+            if (btn) { btn.disabled = false; btn.textContent = '🔌 Retry'; }
+            this.game.networkClient?.disconnect();
+          }
+        }, 500);
       }
     });
 
@@ -459,6 +518,10 @@ export class MenuManager {
           <input type="checkbox" id="setting-fullscreen" ${s.fullscreen ? 'checked' : ''} style="accent-color:var(--gold);width:18px;height:18px;cursor:pointer;" />
           <label for="setting-fullscreen" style="color:var(--parchment);cursor:pointer;font-size:14px;">Fullscreen Mode</label>
         </div>
+        <div class="setup-row" style="display:flex;gap:12px;align-items:center;cursor:pointer;">
+          <input type="checkbox" id="setting-prevent-reload" ${(s as any).preventReload ? 'checked' : ''} style="accent-color:var(--gold);width:18px;height:18px;cursor:pointer;" />
+          <label for="setting-prevent-reload" style="color:var(--parchment);cursor:pointer;font-size:14px;">Warn before page reload/close (prevents accidental loss)</label>
+        </div>
 
         <div style="display:flex;gap:12px;margin-top:20px;justify-content:center;">
           <button id="btn-save-settings" class="menu-btn primary" style="margin:0;">💾 Save</button>
@@ -496,6 +559,11 @@ export class MenuManager {
       } else if (!checked && document.fullscreenElement) {
         document.exitFullscreen().catch(() => {});
       }
+    });
+
+    document.getElementById('setting-prevent-reload')?.addEventListener('change', (e) => {
+      (this.settings as any).preventReload = (e.target as HTMLInputElement).checked;
+      this.updateReloadPrevention();
     });
 
     document.getElementById('btn-save-settings')?.addEventListener('click', () => {
@@ -645,28 +713,63 @@ export class MenuManager {
         timeElapsed: this.game.state.timeElapsed,
         phase: this.game.state.phase,
         gameSpeed: this.game.state.gameSpeed,
+        mapType: this.game.state.mapType,
+        mapSize: this.game.state.mapSize,
+        seed: this.game.state.seed,
+        maxPlayers: this.game.state.maxPlayers,
+        mode: this.game.state.mode,
         players: (Array.from(this.game.state.players.entries()) as any[]).map(([id, p]: [any, any]) => ({
-          ...p,
+          id,
+          name: p.name,
+          civilization: p.civilization,
+          team: p.team,
+          color: p.color,
+          isAI: p.isAI,
+          aiDifficulty: p.aiDifficulty,
+          age: p.age,
+          resources: { ...p.resources },
+          population: p.population,
+          populationCap: p.populationCap,
           researchedTechs: Array.from(p.researchedTechs),
-          exploredTiles: [], // too large to save
           idleVillagers: p.idleVillagers,
           militaryUnits: p.militaryUnits,
           buildings: p.buildings,
         })),
+        entities: this.game.entityManager.serialize(),
+        map: {
+          width: (this.game.state.map as any).width,
+          height: (this.game.state.map as any).height,
+          tiles: (this.game.state.map as any).tiles,
+          startPositions: (this.game.state.map as any).startPositions,
+        },
         timestamp: Date.now(),
       };
-      sessionStorage.setItem('empires-risen-save', JSON.stringify(state));
+      localStorage.setItem('empires-risen-save', JSON.stringify(state));
     } catch (e) {
       console.warn('Failed to save game state:', e);
     }
   }
 
   hasResumableGame(): boolean {
-    return sessionStorage.getItem('empires-risen-save') !== null;
+    return localStorage.getItem('empires-risen-save') !== null;
   }
 
   clearSavedGame(): void {
-    sessionStorage.removeItem('empires-risen-save');
+    localStorage.removeItem('empires-risen-save');
+  }
+
+  loadSavedGame(): void {
+    try {
+      const raw = localStorage.getItem('empires-risen-save');
+      if (!raw) return;
+      const save = JSON.parse(raw);
+      this.showGame();
+      this.game.restoreFromSave(save);
+    } catch (e) {
+      console.error('Failed to load save:', e);
+      this.clearSavedGame();
+      this.showMainMenu();
+    }
   }
 
   // ---- In-game overlays ----
