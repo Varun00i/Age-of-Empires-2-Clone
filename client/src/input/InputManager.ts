@@ -434,6 +434,11 @@ export class InputManager {
         this.game.hudManager?.toggleBuildMenu();
         break;
 
+      case 't':
+        // Open tech tree
+        this.game.hudManager?.showTechTree();
+        break;
+
       case 'F3':
         e.preventDefault();
         this.game.isPaused ? this.game.resume() : this.game.pause();

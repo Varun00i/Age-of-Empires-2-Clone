@@ -143,7 +143,7 @@ export class UnitSystem {
     }
 
     // Move towards target
-    const speed = unit.data.speed * dt * 0.001;
+    const speed = unit.data.speed * dt;
     const moveX = (dx / dist) * Math.min(speed, dist);
     const moveY = (dy / dist) * Math.min(speed, dist);
 
@@ -304,6 +304,16 @@ export class UnitSystem {
       if (harvested > 0) {
         unit.carryAmount += harvested;
         unit.gatherCooldown = 2000; // 2 second gather rate
+
+        // Spawn gathering particles and play sound
+        const gatherType = unit.carryType ?? 'food';
+        const particleType = gatherType === 'gold' ? 'gold' :
+                             gatherType === 'stone' ? 'spark' :
+                             gatherType === 'wood' ? 'wood' : 'food';
+        this.game.renderer.spawnParticles(pos.x, pos.y, particleType, 2);
+        const soundType = gatherType === 'wood' ? 'chop' :
+                          gatherType === 'gold' || gatherType === 'stone' ? 'mine' : 'chop';
+        this.game.audioManager?.playPositional(soundType, pos.x, pos.y);
       } else {
         em.setUnitState(entityId, 'idle');
       }
@@ -345,6 +355,15 @@ export class UnitSystem {
       // Advance build progress
       const buildRate = 1 / (building.data.buildTime * 20); // 20 ticks per second
       building.buildProgress = Math.min(1, building.buildProgress + buildRate);
+
+      // Construction dust particles every few frames
+      if (Math.random() < 0.1) {
+        const tPos = em.getPosition(unit.targetId);
+        if (tPos) {
+          this.game.renderer.spawnParticles(tPos.x, tPos.y, 'dust', 2);
+          this.game.audioManager?.playPositional('build', tPos.x, tPos.y);
+        }
+      }
 
       // Increase HP proportionally
       const targetHP = Math.floor(building.data.hp * building.buildProgress);

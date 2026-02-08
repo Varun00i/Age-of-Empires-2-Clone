@@ -8,6 +8,7 @@ import { Game } from '../engine/Game';
 import { EntityId, Age, ResourceType, PLAYER_COLORS } from '@shared/types';
 import { BUILDINGS } from '@shared/data/buildings';
 import { UNITS } from '@shared/data/units';
+import { TECHNOLOGIES } from '@shared/data/technologies';
 
 export class HUDManager {
   private game: Game;
@@ -19,11 +20,16 @@ export class HUDManager {
   private goldEl!: HTMLElement;
   private stoneEl!: HTMLElement;
   private popEl!: HTMLElement;
+  private popMaxEl!: HTMLElement;
   private ageEl!: HTMLElement;
   private timerEl!: HTMLElement;
   private unitInfoEl!: HTMLElement;
   private actionGridEl!: HTMLElement;
   private notifArea!: HTMLElement;
+
+  // Idle unit tracking
+  private idleVilCount: number = 0;
+  private idleMilCount: number = 0;
 
   constructor(game: Game) {
     this.game = game;
@@ -31,22 +37,24 @@ export class HUDManager {
 
   init(): void {
     // Cache DOM references
-    this.foodEl = document.getElementById('food-amount')!;
-    this.woodEl = document.getElementById('wood-amount')!;
-    this.goldEl = document.getElementById('gold-amount')!;
-    this.stoneEl = document.getElementById('stone-amount')!;
-    this.popEl = document.getElementById('pop-display')!;
-    this.ageEl = document.getElementById('current-age')!;
+    this.foodEl = document.getElementById('res-food')!;
+    this.woodEl = document.getElementById('res-wood')!;
+    this.goldEl = document.getElementById('res-gold')!;
+    this.stoneEl = document.getElementById('res-stone')!;
+    this.popEl = document.getElementById('pop-current')!;
+    this.popMaxEl = document.getElementById('pop-max')!;
+    this.ageEl = document.getElementById('age-display')!;
     this.timerEl = document.getElementById('game-timer')!;
     this.unitInfoEl = document.getElementById('unit-info')!;
     this.actionGridEl = document.getElementById('action-grid')!;
-    this.notifArea = document.getElementById('notification-area')!;
+    this.notifArea = document.getElementById('notifications')!;
   }
 
   update(dt: number): void {
     this.updateResourceDisplay();
     this.updateTimer();
     this.updateNotifications(dt);
+    this.updateIdleUnitCounts();
   }
 
   private updateResourceDisplay(): void {
@@ -62,8 +70,11 @@ export class HUDManager {
     const pop = this.game.entityManager.getPopulation(this.game.localPlayerId);
     const popCap = this.game.entityManager.getPopulationCap(this.game.localPlayerId);
     if (this.popEl) {
-      this.popEl.textContent = `${pop}/${popCap}`;
+      this.popEl.textContent = String(pop);
       this.popEl.style.color = pop >= popCap ? '#e74c3c' : '#e8d5a3';
+    }
+    if (this.popMaxEl) {
+      this.popMaxEl.textContent = String(popCap);
     }
 
     // Age
@@ -418,7 +429,115 @@ export class HUDManager {
     }, 10000);
   }
 
+  // ---- Idle Unit Counter ----
+
+  private updateIdleUnitCounts(): void {
+    const em = this.game.entityManager;
+    const pid = this.game.localPlayerId;
+    this.idleVilCount = em.getIdleVillagers(pid).length;
+    this.idleMilCount = em.getIdleMilitary(pid).length;
+
+    const vilEl = document.getElementById('idle-vil');
+    const milEl = document.getElementById('idle-mil');
+    if (vilEl) {
+      if (this.idleVilCount > 0) {
+        vilEl.style.display = 'inline';
+        vilEl.textContent = `👷 ${this.idleVilCount}`;
+      } else {
+        vilEl.style.display = 'none';
+      }
+    }
+    if (milEl) {
+      if (this.idleMilCount > 0) {
+        milEl.style.display = 'inline';
+        milEl.textContent = `⚔️ ${this.idleMilCount}`;
+      } else {
+        milEl.style.display = 'none';
+      }
+    }
+  }
+
+  getIdleVillagerCount(): number { return this.idleVilCount; }
+  getIdleMilitaryCount(): number { return this.idleMilCount; }
+
+  // ---- Tech Tree ----
+
+  showTechTree(): void {
+    // Remove existing overlay
+    document.getElementById('tech-tree-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'tech-tree-overlay';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; z-index: 1500;
+      background: rgba(0,0,0,0.9);
+      display: flex; flex-direction: column; align-items: center; padding: 20px;
+      overflow-y: auto; font-family: Georgia, serif; color: #e0d8c8;
+    `;
+
+    const player = this.game.state.players.get(this.game.localPlayerId);
+    const researched = player?.researchedTechs ?? new Set<string>();
+
+    let html = `<h2 style="color:#d4a944;margin-bottom:16px;">Technology Tree</h2>`;
+    html += `<button id="close-tech-tree" style="position:absolute;top:10px;right:20px;background:#2a2520;border:1px solid #4a3a20;color:#d4a944;padding:8px 16px;cursor:pointer;font-size:1rem;">Close</button>`;
+
+    // Group techs by building
+    const groups: Record<string, string[]> = {};
+    for (const [id, tech] of Object.entries(TECHNOLOGIES)) {
+      const building = tech.researchedAt ?? 'other';
+      if (!groups[building]) groups[building] = [];
+      groups[building].push(id);
+    }
+
+    html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;max-width:1200px;width:100%;">`;
+    for (const [building, techs] of Object.entries(groups)) {
+      html += `<div style="background:rgba(30,25,20,0.8);border:1px solid #3a3020;border-radius:8px;padding:12px;">`;
+      html += `<h3 style="color:#d4a944;margin-bottom:8px;text-transform:capitalize;">${building.replace(/([A-Z])/g, ' $1').trim()}</h3>`;
+      for (const techId of techs) {
+        const tech = TECHNOLOGIES[techId];
+        const isResearched = researched.has(techId);
+        const costStr = Object.entries(tech.cost ?? {})
+          .filter(([, v]) => (v ?? 0) > 0)
+          .map(([r, v]) => `${v} ${r}`)
+          .join(', ');
+        const borderColor = isResearched ? '#27ae60' : '#4a3a20';
+        const bg = isResearched ? 'rgba(39,174,96,0.15)' : 'rgba(0,0,0,0.3)';
+        html += `<div style="background:${bg};border:1px solid ${borderColor};padding:6px 8px;margin:4px 0;border-radius:4px;">
+          <div style="color:${isResearched ? '#27ae60' : '#c0b898'};font-size:12px;font-weight:bold;">
+            ${isResearched ? '✅' : '📜'} ${tech.name}
+          </div>
+          <div style="font-size:10px;color:#8b8070;">${tech.description}</div>
+          <div style="font-size:10px;color:#6b6060;">Cost: ${costStr || 'Free'} | Time: ${tech.researchTime}s</div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+
+    document.getElementById('close-tech-tree')?.addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) overlay.remove();
+    });
+  }
+
+  // ---- Cost Tooltip Helper ----
+
+  formatCost(cost: Partial<Record<string, number>>): string {
+    return Object.entries(cost)
+      .filter(([, v]) => (v ?? 0) > 0)
+      .map(([r, v]) => {
+        const icons: Record<string, string> = { food: '🍖', wood: '🪵', gold: '🪙', stone: '🪨' };
+        return `${icons[r] ?? r} ${v}`;
+      })
+      .join('  ');
+  }
+
   dispose(): void {
     this.notificationQueue = [];
+    document.getElementById('tech-tree-overlay')?.remove();
+    document.getElementById('endgame-overlay')?.remove();
   }
 }

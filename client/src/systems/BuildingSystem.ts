@@ -7,6 +7,7 @@ import { Game } from '../engine/Game';
 import { EntityId, Vec2, ResourceType, Age } from '@shared/types';
 import { BUILDINGS } from '@shared/data/buildings';
 import { UNITS } from '@shared/data/units';
+import { TECHNOLOGIES } from '@shared/data/technologies';
 
 export class BuildingSystem {
   private game: Game;
@@ -160,8 +161,23 @@ export class BuildingSystem {
     const player = this.game.state.players.get(playerId);
     if (player?.researchedTechs.has(techId)) return false;
 
-    // TODO: Check tech cost via TECHNOLOGIES data
-    return em.addToResearchQueue(buildingId, techId, 30); // Default 30s research
+    // Check tech cost and deduct resources
+    const techData = TECHNOLOGIES[techId];
+    if (techData) {
+      if (!this.canAfford(playerId, techData.cost)) return false;
+      this.deductCost(playerId, techData.cost);
+
+      // Check prerequisites
+      if (techData.prerequisites) {
+        for (const prereq of techData.prerequisites) {
+          if (!player?.researchedTechs.has(prereq)) return false;
+        }
+      }
+
+      return em.addToResearchQueue(buildingId, techId, techData.researchTime);
+    }
+
+    return em.addToResearchQueue(buildingId, techId, 30); // Fallback
   }
 
   private processResearchQueue(buildingId: EntityId, dt: number): void {

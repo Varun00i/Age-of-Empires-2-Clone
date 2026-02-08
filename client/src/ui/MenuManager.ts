@@ -388,8 +388,8 @@ export class MenuManager {
     helpEl.style.display = 'block';
     helpEl.innerHTML = `
       <h2 style="color:#f4d03f;margin-bottom:16px;">How to Play</h2>
-      <div style="color:#c0a060;font-size:13px;line-height:1.6;">
-        <h3 style="color:#e8d5a3;">Controls</h3>
+      <div style="color:#c0a060;font-size:13px;line-height:1.6;max-height:60vh;overflow-y:auto;padding-right:8px;">
+        <h3 style="color:#e8d5a3;">🎮 Controls</h3>
         <ul>
           <li><strong>Left Click:</strong> Select units/buildings</li>
           <li><strong>Right Click:</strong> Move, attack, gather</li>
@@ -400,12 +400,15 @@ export class MenuManager {
           <li><strong>#:</strong> Select control group</li>
           <li><strong>H:</strong> Select Town Center</li>
           <li><strong>. (period):</strong> Select idle villager</li>
+          <li><strong>, (comma):</strong> Select idle military</li>
           <li><strong>B:</strong> Open build menu (with villager)</li>
           <li><strong>Delete:</strong> Delete selected unit</li>
           <li><strong>Escape:</strong> Cancel / Deselect</li>
+          <li><strong>F3:</strong> Pause game</li>
+          <li><strong>F11:</strong> Toggle fullscreen</li>
         </ul>
 
-        <h3 style="color:#e8d5a3;">Mobile Controls</h3>
+        <h3 style="color:#e8d5a3;">📱 Mobile Controls</h3>
         <ul>
           <li><strong>Tap:</strong> Select</li>
           <li><strong>Double Tap:</strong> Select all of same type</li>
@@ -414,9 +417,43 @@ export class MenuManager {
           <li><strong>Pinch:</strong> Zoom</li>
         </ul>
 
-        <h3 style="color:#e8d5a3;">Goal</h3>
-        <p>Build your civilization from the Dark Age through the Imperial Age.
-        Gather resources, train armies, research technologies, and defeat your opponents!</p>
+        <h3 style="color:#e8d5a3;">🏗️ Getting Started</h3>
+        <ol>
+          <li>Select your <strong>Town Center</strong> (H key) and train <strong>Villagers</strong></li>
+          <li>Send villagers to gather <strong>food</strong> (berries, farms) and <strong>wood</strong> (trees)</li>
+          <li>Build <strong>Houses</strong> to increase population cap</li>
+          <li>Build a <strong>Barracks</strong> to train military units</li>
+          <li>Research <strong>Loom</strong> at the Town Center to protect villagers</li>
+          <li>Advance to the <strong>Feudal Age</strong> when you have 500 food</li>
+        </ol>
+
+        <h3 style="color:#e8d5a3;">⚔️ Combat Tips</h3>
+        <ul>
+          <li>Spearmen counter Cavalry; Cavalry counters Archers; Archers counter Infantry</li>
+          <li>Siege weapons deal bonus damage to buildings</li>
+          <li>Monks can convert enemy units</li>
+          <li>Garrison units in buildings for protection</li>
+          <li>Build a diverse army composition for best results</li>
+        </ul>
+
+        <h3 style="color:#e8d5a3;">📊 Age Advancement</h3>
+        <table style="font-size:12px;border-collapse:collapse;width:100%;">
+          <tr style="border-bottom:1px solid #3a3020;">
+            <td style="padding:4px;color:#d4a944;">Feudal Age</td>
+            <td style="padding:4px;">500 Food</td>
+          </tr>
+          <tr style="border-bottom:1px solid #3a3020;">
+            <td style="padding:4px;color:#d4a944;">Castle Age</td>
+            <td style="padding:4px;">800 Food, 200 Gold</td>
+          </tr>
+          <tr>
+            <td style="padding:4px;color:#d4a944;">Imperial Age</td>
+            <td style="padding:4px;">1000 Food, 800 Gold</td>
+          </tr>
+        </table>
+
+        <h3 style="color:#e8d5a3;">🏆 Victory</h3>
+        <p>Destroy all enemy Town Centers and military units to achieve <strong>Conquest</strong> victory!</p>
       </div>
 
       <button id="btn-back-help" class="menu-btn" style="margin-top:16px;">◀️ Back</button>

@@ -203,6 +203,10 @@ export class Game {
     this.accumulator = 0;
     this.gameLoop(this.lastTime);
 
+    // Start background music and ambient sounds
+    this.audioManager.startBackgroundMusic();
+    this.audioManager.startAmbientSounds();
+
     console.log(`Game started: ${options.mode} on ${options.mapType} (${options.mapSize}x${options.mapSize})`);
   }
 
@@ -215,7 +219,7 @@ export class Game {
       if (!spawn) continue;
 
       // Spawn Town Center
-      const tc = this.entityManager.createBuilding('townCenter', playerId, spawn.x, spawn.y);
+      const tc = this.entityManager.createBuilding('townCenter', playerId, spawn.x, spawn.y, true);
       player.buildings.push(tc);
 
       // Spawn starting villagers (3)
@@ -293,7 +297,7 @@ export class Game {
     this.buildingSystem.update(dt);
     this.resourceSystem.update(dt);
     this.combatSystem.update(dt);
-    this.fogOfWar.update(this.localPlayerId);
+    this.fogOfWar.update(dt);
 
     // Update AI
     this.aiController.update(dt);
@@ -394,6 +398,16 @@ export class Game {
           if (player) player.diplomacy[cmd.targetPlayerId] = cmd.stance;
         }
         break;
+      case CommandType.AttackMove:
+        if (cmd.entityIds && cmd.position) {
+          for (const eid of cmd.entityIds) {
+            this.unitSystem.moveUnit(eid, cmd.position);
+            // Set attack-move flag so units engage enemies along the path
+            const unit = this.entityManager.getUnitComponent(eid);
+            if (unit) (unit as any).attackMove = true;
+          }
+        }
+        break;
       case CommandType.Resign:
         this.playerDefeated(cmd.playerId);
         break;
@@ -440,11 +454,82 @@ export class Game {
   gameOver(winnerId: PlayerId): void {
     this.state.phase = GamePhase.Ended;
     const winner = this.state.players.get(winnerId);
+    this.audioManager?.play('horn');
+
     if (winnerId === this.localPlayerId) {
       this.hudManager.showNotification('Victory! You have won!', '#f4d03f');
+      this.audioManager?.play('ageUp');
+      this.showEndGameStats(winnerId, true);
     } else {
       this.hudManager.showNotification(`${winner?.name ?? 'Unknown'} wins the game!`, '#e74c3c');
+      this.showEndGameStats(winnerId, false);
     }
+  }
+
+  private showEndGameStats(winnerId: PlayerId, isVictory: boolean): void {
+    const overlay = document.createElement('div');
+    overlay.id = 'endgame-overlay';
+    overlay.style.cssText = `
+      position: fixed; inset: 0; z-index: 2000;
+      background: rgba(0,0,0,0.85);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-family: Georgia, serif; color: #e0d8c8; animation: fadeIn 0.5s;
+    `;
+
+    const title = isVictory ? '🏆 VICTORY 🏆' : '💀 DEFEAT 💀';
+    const titleColor = isVictory ? '#f4d03f' : '#e74c3c';
+
+    let statsHTML = `<h1 style="font-size:3rem;color:${titleColor};margin-bottom:1rem;text-shadow:0 0 20px ${titleColor}80;">${title}</h1>`;
+    statsHTML += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;max-width:800px;width:90%;margin-bottom:2rem;">`;
+
+    for (const [pid, player] of this.state.players) {
+      const score = this.resourceSystem.calculateScore(pid);
+      const color = '#' + player.color.toString(16).padStart(6, '0');
+      const isWinner = pid === winnerId;
+      statsHTML += `
+        <div style="background:rgba(30,25,20,0.9);border:2px solid ${isWinner ? '#f4d03f' : '#3a3020'};
+                    padding:12px;border-radius:8px;text-align:center;">
+          <div style="color:${color};font-weight:bold;font-size:1.1rem;margin-bottom:6px;">
+            ${player.name} ${isWinner ? '👑' : ''}
+          </div>
+          <div style="font-size:0.85rem;color:#8b8070;">
+            ${player.civilization}<br>
+            Score: ${score}<br>
+            ${player.isDefeated ? '<span style="color:#e74c3c;">Defeated</span>' : '<span style="color:#27ae60;">Survived</span>'}
+          </div>
+        </div>`;
+    }
+    statsHTML += `</div>`;
+
+    // Game time
+    const totalSec = Math.floor(this.state.tick / 20);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    statsHTML += `<div style="color:#8b8070;margin-bottom:2rem;">Game Time: ${min}:${sec.toString().padStart(2, '0')}</div>`;
+
+    // Buttons
+    statsHTML += `
+      <div style="display:flex;gap:12px;">
+        <button id="endgame-menu" style="padding:12px 24px;background:#2a2520;border:1px solid #4a3a20;color:#d4a944;
+                font-size:1rem;cursor:pointer;font-family:Georgia,serif;border-radius:4px;">Main Menu</button>
+        <button id="endgame-rematch" style="padding:12px 24px;background:#2a2520;border:1px solid #4a3a20;color:#d4a944;
+                font-size:1rem;cursor:pointer;font-family:Georgia,serif;border-radius:4px;">Play Again</button>
+      </div>`;
+
+    overlay.innerHTML = statsHTML;
+    document.body.appendChild(overlay);
+
+    document.getElementById('endgame-menu')?.addEventListener('click', () => {
+      overlay.remove();
+      this.stop();
+      this.menuManager.showMainMenu();
+    });
+    document.getElementById('endgame-rematch')?.addEventListener('click', () => {
+      overlay.remove();
+      this.stop();
+      // Quick rematch
+      this.menuManager.showMainMenu();
+    });
   }
 
   selectEntitiesInRect(x1: number, y1: number, x2: number, y2: number): void {

@@ -5,6 +5,19 @@
 
 import { Game } from '../engine/Game';
 import { TerrainType, TILE_SIZE, EntityId } from '@shared/types';
+import { BUILDINGS } from '@shared/data/buildings';
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+  type: 'blood' | 'spark' | 'dust' | 'smoke' | 'gold' | 'wood' | 'food';
+}
 
 interface Camera {
   x: number;
@@ -62,6 +75,15 @@ export class Renderer {
 
   // Animation
   private animTime: number = 0;
+
+  // Particle system
+  private particles: Particle[] = [];
+
+  // Building placement preview
+  public buildPreview: { type: string; x: number; y: number; valid: boolean } | null = null;
+
+  // Day/night cycle
+  private dayNightTime: number = 0;
 
   // Isometric constants
   private readonly ISO_W = TILE_SIZE;
@@ -249,6 +271,7 @@ export class Renderer {
     if (!this.game.state) return;
 
     this.animTime += 16;
+    this.dayNightTime += 0.0001;
     this.ctx.clearRect(0, 0, this.width, this.height);
 
     // Smooth camera interpolation
@@ -269,6 +292,11 @@ export class Renderer {
     // Render resources on map
     this.renderMapResources();
 
+    // Render building placement preview
+    if (this.buildPreview) {
+      this.renderBuildPreview();
+    }
+
     // Render buildings
     this.renderBuildings();
 
@@ -278,10 +306,16 @@ export class Renderer {
     // Render projectiles / effects
     this.renderEffects();
 
+    // Render particles
+    this.updateAndRenderParticles();
+
     // Render selection indicators
     this.renderSelectionIndicators();
 
     this.ctx.restore();
+
+    // Day/night ambient overlay
+    this.renderDayNightOverlay();
 
     // Render minimap
     this.renderMinimap();
@@ -313,8 +347,33 @@ export class Renderer {
         const screenY = (x + y) * (this.ISO_H / 2);
 
         // Draw tile
-        const baseColor = (x + y) % 2 === 0 ?
-          TERRAIN_COLORS[tile.terrain] : TERRAIN_COLORS_DARK[tile.terrain];
+        let baseColor: string;
+        const isWater = tile.terrain === TerrainType.Water ||
+          tile.terrain === TerrainType.DeepWater ||
+          tile.terrain === TerrainType.ShallowWater;
+
+        if (isWater) {
+          // Animated water with wave effect
+          const wave = Math.sin(this.animTime * 0.003 + x * 0.5 + y * 0.3) * 0.15 + 0.85;
+          const wave2 = Math.sin(this.animTime * 0.002 + x * 0.3 - y * 0.5) * 0.1;
+          const base = TERRAIN_COLORS[tile.terrain];
+          const r = parseInt(base.slice(1, 3), 16);
+          const g = parseInt(base.slice(3, 5), 16);
+          const b = parseInt(base.slice(5, 7), 16);
+          baseColor = `rgb(${Math.floor(r * wave)},${Math.floor(g * wave)},${Math.min(255, Math.floor((b + wave2 * 40) * wave))})`;
+
+          // Water sparkle
+          if (Math.sin(this.animTime * 0.01 + x * 7.3 + y * 13.7) > 0.97) {
+            this.ctx.fillStyle = baseColor;
+            this.drawIsoTile(screenX, screenY);
+            this.ctx.fillStyle = `rgba(255,255,255,${0.2 + Math.sin(this.animTime * 0.008 + x) * 0.15})`;
+            this.drawIsoTile(screenX, screenY);
+            continue;
+          }
+        } else {
+          baseColor = (x + y) % 2 === 0 ?
+            TERRAIN_COLORS[tile.terrain] : TERRAIN_COLORS_DARK[tile.terrain];
+        }
 
         this.ctx.fillStyle = baseColor;
         this.drawIsoTile(screenX, screenY);
@@ -748,8 +807,116 @@ export class Renderer {
     this.camera.targetY = isoY;
   }
 
+  // ---- Particle System ----
+
+  spawnParticles(worldX: number, worldY: number, type: Particle['type'], count: number = 5): void {
+    const colors: Record<string, string[]> = {
+      blood: ['#c0392b', '#e74c3c', '#922b21'],
+      spark: ['#f39c12', '#f1c40f', '#fff'],
+      dust: ['#8b7355', '#a09080', '#6b5335'],
+      smoke: ['#555', '#666', '#777'],
+      gold: ['#f4d03f', '#f39c12', '#e8b810'],
+      wood: ['#6b4226', '#8b5e3c', '#a0724c'],
+      food: ['#e74c3c', '#27ae60', '#f39c12'],
+    };
+
+    for (let i = 0; i < count; i++) {
+      const colorSet = colors[type] ?? colors.dust;
+      this.particles.push({
+        x: worldX + (Math.random() - 0.5) * 0.5,
+        y: worldY + (Math.random() - 0.5) * 0.5,
+        vx: (Math.random() - 0.5) * 2,
+        vy: -(Math.random() * 3 + 1),
+        life: 1,
+        maxLife: 0.5 + Math.random() * 0.5,
+        color: colorSet[Math.floor(Math.random() * colorSet.length)],
+        size: 1.5 + Math.random() * 2,
+        type,
+      });
+    }
+  }
+
+  private updateAndRenderParticles(): void {
+    const dt = 0.016;
+    this.particles = this.particles.filter(p => {
+      p.life -= dt / p.maxLife;
+      if (p.life <= 0) return false;
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 5 * dt; // gravity
+      if (p.type === 'smoke') {
+        p.vy -= 8 * dt; // smoke rises
+        p.size += dt * 2;
+      }
+
+      const screenX = (p.x - p.y) * (this.ISO_W / 2);
+      const screenY = (p.x + p.y) * (this.ISO_H / 2);
+
+      this.ctx.globalAlpha = p.life;
+      this.ctx.fillStyle = p.color;
+      this.ctx.beginPath();
+      this.ctx.arc(screenX, screenY - 6, p.size * p.life, 0, Math.PI * 2);
+      this.ctx.fill();
+      this.ctx.globalAlpha = 1;
+
+      return true;
+    });
+  }
+
+  // ---- Building Placement Preview ----
+
+  private renderBuildPreview(): void {
+    if (!this.buildPreview) return;
+
+    const { type, x, y, valid } = this.buildPreview;
+    const screenX = (x - y) * (this.ISO_W / 2);
+    const screenY = (x + y) * (this.ISO_H / 2);
+
+    const sprite = this.buildingSprites.get(type);
+
+    this.ctx.save();
+    this.ctx.globalAlpha = 0.5;
+
+    if (sprite) {
+      this.ctx.drawImage(sprite, screenX - sprite.width / 2, screenY - sprite.height / 2);
+    }
+
+    // Tint valid/invalid
+    const tileColor = valid ? 'rgba(0,255,100,0.3)' : 'rgba(255,0,0,0.3)';
+
+    const data = BUILDINGS[type];
+    const size = data?.size ?? { x: 2, y: 2 };
+
+    for (let dy = 0; dy < size.y; dy++) {
+      for (let dx = 0; dx < size.x; dx++) {
+        const tileScreenX = ((x + dx) - (y + dy)) * (this.ISO_W / 2);
+        const tileScreenY = ((x + dx) + (y + dy)) * (this.ISO_H / 2);
+        this.ctx.fillStyle = tileColor;
+        this.drawIsoTile(tileScreenX, tileScreenY);
+      }
+    }
+
+    this.ctx.restore();
+  }
+
+  // ---- Day/Night Cycle ----
+
+  private renderDayNightOverlay(): void {
+    const cycle = Math.sin(this.dayNightTime) * 0.5 + 0.5; // 0=night, 1=day
+    const nightIntensity = Math.max(0, 0.15 - cycle * 0.15);
+
+    if (nightIntensity > 0.01) {
+      this.ctx.save();
+      this.ctx.fillStyle = `rgba(10, 10, 40, ${nightIntensity})`;
+      this.ctx.fillRect(0, 0, this.width, this.height);
+      this.ctx.restore();
+    }
+  }
+
   dispose(): void {
     this.unitSprites.clear();
     this.buildingSprites.clear();
+    this.particles = [];
   }
 }

@@ -106,6 +106,22 @@ export class CombatSystem {
   private handleEntityKill(killerId: EntityId, victimId: EntityId): void {
     const em = this.game.entityManager;
 
+    // Spawn death particles
+    const victimPos = em.getPosition(victimId);
+    if (victimPos) {
+      const isBuilding = em.isBuilding(victimId);
+      this.game.renderer.spawnParticles(
+        victimPos.x, victimPos.y,
+        isBuilding ? 'smoke' : 'blood',
+        isBuilding ? 12 : 6
+      );
+      if (isBuilding) {
+        this.game.renderer.spawnParticles(victimPos.x, victimPos.y, 'spark', 8);
+      }
+      // Play death sound
+      this.game.audioManager?.playPositional('death', victimPos.x, victimPos.y);
+    }
+
     // Remove victim
     if (em.isBuilding(victimId)) {
       this.game.buildingSystem.deleteBuilding(victimId);

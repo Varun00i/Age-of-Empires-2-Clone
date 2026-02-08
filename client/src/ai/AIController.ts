@@ -82,6 +82,9 @@ export class AIController {
       this.thinkEconomy(aiState);
       this.thinkMilitary(aiState);
       this.thinkBuildings(aiState);
+      this.thinkResearch(aiState);
+      this.thinkDefense(aiState);
+      this.thinkScout(aiState, dt);
       this.thinkAttack(aiState, dt);
     }
   }
@@ -457,6 +460,144 @@ export class AIController {
       }
     }
     return null;
+  }
+
+  // ---- Research ----
+
+  private thinkResearch(ai: AIState): void {
+    const em = this.game.entityManager;
+    const playerId = ai.playerId;
+    const player = this.game.state.players.get(playerId);
+    if (!player) return;
+
+    // Priority research based on age
+    const researchPriority: string[][] = [
+      // Dark Age
+      ['loom'],
+      // Feudal Age
+      ['doubleBitAxe', 'horseCollar', 'goldMining', 'forgingInfantry', 'scaleMailArmor'],
+      // Castle Age
+      ['bowSaw', 'heavyPlow', 'goldShaftMining', 'ironCastingInfantry', 'chainMailArmor', 'wheelbarrow'],
+      // Imperial Age
+      ['twoManSaw', 'cropRotation', 'blastFurnaceInfantry', 'handCart'],
+    ];
+
+    const ageIndex = ai.currentAge === Age.Dark ? 0 :
+                     ai.currentAge === Age.Feudal ? 1 :
+                     ai.currentAge === Age.Castle ? 2 : 3;
+
+    for (let i = 0; i <= ageIndex; i++) {
+      for (const techId of researchPriority[i]) {
+        if (player.researchedTechs.has(techId)) continue;
+
+        // Find the building that researches this tech
+        const techData = (globalThis as any).__TECHNOLOGIES?.[techId];
+        const researchedAt = techData?.researchedAt;
+        if (!researchedAt) continue;
+
+        const buildings = em.getBuildingsByType(researchedAt, playerId);
+        for (const b of buildings) {
+          if (em.isBuildingComplete(b)) {
+            this.game.buildingSystem.research(b, techId, playerId);
+            return; // One research per think cycle
+          }
+        }
+      }
+    }
+  }
+
+  // ---- Defense ----
+
+  private thinkDefense(ai: AIState): void {
+    const em = this.game.entityManager;
+    const playerId = ai.playerId;
+
+    // Check for enemy units near base
+    const tcs = em.getBuildingsByType('townCenter', playerId);
+    if (tcs.length === 0) return;
+
+    const tcPos = em.getPosition(tcs[0]);
+    if (!tcPos) return;
+
+    // Scan for threats near TC
+    const threats = em.getEntitiesInRange(tcPos.x, tcPos.y, 15);
+    const enemyThreats: EntityId[] = [];
+    for (const threatId of threats) {
+      const owner = em.getOwner(threatId);
+      if (owner !== playerId && owner !== -1 && em.isUnit(threatId)) {
+        enemyThreats.push(threatId);
+      }
+    }
+
+    if (enemyThreats.length === 0) return;
+
+    // Rally idle military to defend
+    const idleMilitary = em.getIdleMilitary(playerId);
+    if (idleMilitary.length > 0) {
+      for (const unitId of idleMilitary) {
+        this.game.issueCommand({
+          type: CommandType.Attack,
+          entityIds: [unitId],
+          targetId: enemyThreats[0],
+          playerId,
+        });
+      }
+    }
+
+    // Garrison villagers if heavily outnumbered
+    if (enemyThreats.length > 5) {
+      const villagers = em.getUnitsByType('villager', playerId);
+      for (const vId of villagers.slice(0, 5)) {
+        const vPos = em.getPosition(vId);
+        if (vPos && Math.hypot(vPos.x - tcPos.x, vPos.y - tcPos.y) < 20) {
+          this.game.issueCommand({
+            type: CommandType.Garrison,
+            entityIds: [vId],
+            targetId: tcs[0],
+            playerId,
+          });
+        }
+      }
+
+      // Ring the town bell
+      this.game.hudManager.showNotification(`Player ${playerId} is under attack!`, '#e74c3c');
+    }
+  }
+
+  // ---- Scouting ----
+
+  private thinkScout(ai: AIState, dt: number): void {
+    const em = this.game.entityManager;
+    const playerId = ai.playerId;
+
+    ai.scoutTimer -= dt;
+    if (ai.scoutTimer > 0) return;
+    ai.scoutTimer = 10000; // Scout every 10 seconds
+
+    // Find scout unit
+    const scouts = em.getUnitsByType('scoutCavalry', playerId);
+    if (scouts.length === 0) return;
+
+    const scoutId = scouts[0];
+    const scoutPos = em.getPosition(scoutId);
+    if (!scoutPos) return;
+
+    const state = em.getUnitState(scoutId);
+    if (state !== 'idle') return;
+
+    // Send scout to random unexplored area
+    const map = this.game.state.map;
+    if (!map) return;
+
+    const targetX = Math.random() * map.width;
+    const targetY = Math.random() * map.height;
+
+    this.game.issueCommand({
+      type: CommandType.Move,
+      entityIds: [scoutId],
+      position: { x: targetX, y: targetY },
+      playerId,
+    });
   }
 
   dispose(): void {
