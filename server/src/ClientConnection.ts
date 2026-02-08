@@ -4,9 +4,9 @@
 // ============================================================
 
 import { WebSocket } from 'ws';
-import { RoomManager } from './RoomManager';
-import { GameRoom } from './GameRoom';
-import { MessageType, NetworkMessage, GameCommand } from '../../shared/src/types';
+import { RoomManager } from './RoomManager.js';
+import { GameRoom } from './GameRoom.js';
+import { MessageType, NetworkMessage, GameCommand } from '../../shared/src/types.js';
 
 let nextClientId = 1;
 

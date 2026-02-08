@@ -3,8 +3,8 @@
 // Creates, tracks, and garbage-collects game rooms
 // ============================================================
 
-import { ClientConnection } from './ClientConnection';
-import { GameRoom } from './GameRoom';
+import { ClientConnection } from './ClientConnection.js';
+import { GameRoom } from './GameRoom.js';
 
 let nextRoomId = 1;
 

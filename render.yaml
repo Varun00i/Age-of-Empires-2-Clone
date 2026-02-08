@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: empires-risen
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && cd client && npx vite build && cd ../server && npx tsc
+    startCommand: node server/dist/server/src/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20.11.0

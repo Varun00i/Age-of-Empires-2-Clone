@@ -24,7 +24,7 @@ A fully browser-based, real-time strategy game inspired by Age of Empires 2. Pla
 | Client | TypeScript, Vite, Canvas 2D |
 | Server | Node.js, WebSocket (`ws`) |
 | Shared | TypeScript types, A\* pathfinding, seeded RNG |
-| Deploy | Docker, docker-compose |
+| Deploy | Docker, Render, docker-compose |
 
 ## Project Structure
 
@@ -115,8 +115,22 @@ cd client && npx vite build && cd ..
 cd server && npx tsc && cd ..
 
 # Run
-NODE_ENV=production node server/dist/src/index.js
+NODE_ENV=production node server/dist/server/src/index.js
 ```
+
+### Deploy to Render
+
+1. Push your code to GitHub
+2. Go to [render.com](https://render.com) → **New** → **Web Service**
+3. Connect your GitHub repo (`Varun00i/Age-of-Empires-2-Clone`)
+4. Configure:
+   - **Build Command:** `npm install && cd client && npx vite build && cd ../server && npx tsc`
+   - **Start Command:** `node server/dist/server/src/index.js`
+   - **Environment:** Node
+5. Add environment variable: `NODE_ENV` = `production`
+6. Deploy!
+
+Or use the included `render.yaml` blueprint for one-click setup.
 
 ## Controls
 

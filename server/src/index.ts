@@ -5,8 +5,8 @@
 
 import { createServer, IncomingMessage, ServerResponse } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import { RoomManager } from './RoomManager';
-import { ClientConnection } from './ClientConnection';
+import { RoomManager } from './RoomManager.js';
+import { ClientConnection } from './ClientConnection.js';
 import { readFileSync, existsSync, statSync } from 'fs';
 import { join, extname, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -17,7 +17,7 @@ const __dirname = dirname(__filename);
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const MAX_CONNECTIONS = 200;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
-const CLIENT_DIST = join(__dirname, '../../client/dist');
+const CLIENT_DIST = join(process.cwd(), 'client/dist');
 
 const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',

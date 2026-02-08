@@ -4,8 +4,8 @@
 // Deterministic lockstep command synchronization
 // ============================================================
 
-import { ClientConnection } from './ClientConnection';
-import { MessageType, NetworkMessage, GameCommand } from '../../shared/src/types';
+import { ClientConnection } from './ClientConnection.js';
+import { MessageType, NetworkMessage, GameCommand } from '../../shared/src/types.js';
 
 interface RoomPlayer {
   client: ClientConnection;
