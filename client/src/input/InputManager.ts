@@ -91,11 +91,13 @@ export class InputManager {
   private controlGroups: Map<number, number[]> = new Map();
   private selectionBox: HTMLElement | null = null;
   private buildMode: string | null = null;
+  private patrolMode: boolean = false;
   private rightClickMoveTimeout: any = null;
   private isMobile: boolean;
 
   // Edge scroll state
   private edgeScrollDir = { x: 0, y: 0 };
+  private hoveredEntity: number | null = null;
 
   constructor(game: Game) {
     this.game = game;
@@ -256,6 +258,12 @@ export class InputManager {
     // Building placement preview
     if (this.buildMode) {
       this.updateBuildPreview();
+    }
+
+    // Hover detection for entity tooltips
+    if (!this.drag.active) {
+      const world = this.game.renderer.screenToWorld(this.mouseX, this.mouseY);
+      this.hoveredEntity = this.game.entityManager.getEntityAt(world.x, world.y);
     }
   }
 
@@ -557,6 +565,27 @@ export class InputManager {
     if (this.game.selectedEntities.length === 0) return;
 
     const world = this.game.renderer.screenToWorld(screenX, screenY);
+
+    // Patrol mode: right-click sets patrol target
+    if (this.patrolMode) {
+      const pos = this.game.entityManager.getPosition(this.game.selectedEntities[0]);
+      if (pos) {
+        for (const eid of this.game.selectedEntities) {
+          const unitPos = this.game.entityManager.getPosition(eid);
+          if (unitPos) {
+            this.game.unitSystem.patrol(eid, [
+              { x: unitPos.x, y: unitPos.y },
+              { x: world.x, y: world.y }
+            ]);
+          }
+        }
+      }
+      this.patrolMode = false;
+      this.canvas.style.cursor = 'default';
+      this.addIndicator(world.x, world.y, 'move');
+      return;
+    }
+
     const targetEntity = this.game.entityManager.getEntityAt(world.x, world.y);
 
     // Determine right-click action based on target
@@ -686,11 +715,20 @@ export class InputManager {
 
   enterBuildMode(buildingId: string): void {
     this.buildMode = buildingId;
+    this.patrolMode = false;
     this.canvas.style.cursor = 'crosshair';
+  }
+
+  enterPatrolMode(): void {
+    this.patrolMode = true;
+    this.buildMode = null;
+    this.canvas.style.cursor = 'crosshair';
+    this.game.hudManager?.showNotification('Right-click to set patrol destination');
   }
 
   cancelBuildMode(): void {
     this.buildMode = null;
+    this.patrolMode = false;
     this.canvas.style.cursor = 'default';
   }
 
@@ -723,7 +761,19 @@ export class InputManager {
   }
 
   private updateBuildPreview(): void {
-    // Building placement preview is rendered via HUDManager
+    if (!this.buildMode) return;
+    const world = this.game.renderer.screenToWorld(this.mouseX, this.mouseY);
+    const tileX = Math.floor(world.x);
+    const tileY = Math.floor(world.y);
+    const canPlace = this.game.buildingSystem.canPlaceBuilding(
+      this.buildMode, tileX, tileY, this.game.localPlayerId
+    );
+    this.game.renderer.buildPreview = {
+      type: this.buildMode,
+      x: tileX,
+      y: tileY,
+      valid: canPlace,
+    };
   }
 
   // ---- Minimap ----
@@ -890,6 +940,14 @@ export class InputManager {
 
   getBuildMode(): string | null {
     return this.buildMode;
+  }
+
+  getHoveredEntity(): number | null {
+    return this.hoveredEntity;
+  }
+
+  getMouseScreen(): { x: number; y: number } {
+    return { x: this.mouseX, y: this.mouseY };
   }
 
   getMouseWorld(): { x: number; y: number } {

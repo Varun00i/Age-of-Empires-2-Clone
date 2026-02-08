@@ -6,6 +6,7 @@
 import { Game } from '../engine/Game';
 import { CIVILIZATIONS } from '@shared/data/civilizations';
 import { MapType } from '../world/MapGenerator';
+import { MessageType } from '@shared/types';
 
 export interface GameSetupOptions {
   mapType: MapType;
@@ -346,6 +347,11 @@ export class MenuManager {
     return `${wsProtocol}//${loc.host}/ws`;
   }
 
+  private mpRoomId: string | null = null;
+  private mpIsHost = false;
+  private mpPlayers: Array<{ id: string; name: string; ready: boolean; color: number }> = [];
+  private mpRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
   private showMultiplayerLobby(): void {
     const defaultUrl = this.getWebSocketUrl();
 
@@ -393,10 +399,11 @@ export class MenuManager {
           if (this.game.networkClient?.connected) {
             clearInterval(pollInterval);
             if (status) {
-              status.textContent = '✅ Connected! Waiting for lobby...';
+              status.textContent = '✅ Connected!';
               status.style.color = '#27ae60';
             }
-            if (btn) { btn.disabled = false; btn.textContent = '✅ Connected'; }
+            // Transition to lobby browser after short delay
+            setTimeout(() => this.showLobbyBrowser(), 500);
           } else if (elapsed >= 8000) {
             clearInterval(pollInterval);
             if (status) {
@@ -411,6 +418,312 @@ export class MenuManager {
     });
 
     document.getElementById('btn-back-mp')?.addEventListener('click', () => this.hidePanel());
+  }
+
+  private showLobbyBrowser(): void {
+    // Register lobby event handlers
+    this.registerMultiplayerHandlers();
+
+    this.showPanel(`
+      <div style="background:rgba(15,12,8,0.6);border:1px solid var(--border);border-radius:8px;padding:20px;text-align:left;">
+        <h2 style="font-family:'Cinzel',Georgia,serif;color:var(--gold);font-size:1.5rem;margin-bottom:16px;text-align:center;">🌐 Lobby</h2>
+
+        <div style="display:flex;gap:12px;margin-bottom:16px;justify-content:center;">
+          <button id="btn-create-room" class="menu-btn primary" style="margin:0;font-size:13px;">➕ Create Room</button>
+          <button id="btn-refresh-rooms" class="menu-btn secondary" style="margin:0;font-size:13px;">🔄 Refresh</button>
+        </div>
+
+        <div id="room-list" style="max-height:200px;overflow-y:auto;margin-bottom:12px;">
+          <p style="color:var(--text-dim);text-align:center;font-size:13px;">Loading rooms...</p>
+        </div>
+
+        <div style="text-align:center;margin-top:8px;">
+          <span style="color:#27ae60;font-size:12px;">● Connected as ${localStorage.getItem('empires-player-name') || 'Player'}</span>
+        </div>
+
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:12px;">
+          <button id="btn-disconnect-mp" class="menu-btn secondary" style="margin:0;">🔌 Disconnect</button>
+        </div>
+      </div>
+    `);
+
+    // Fetch room list
+    this.fetchRoomList();
+
+    document.getElementById('btn-create-room')?.addEventListener('click', () => this.showCreateRoom());
+    document.getElementById('btn-refresh-rooms')?.addEventListener('click', () => this.fetchRoomList());
+    document.getElementById('btn-disconnect-mp')?.addEventListener('click', () => {
+      this.game.networkClient?.disconnect();
+      this.cleanupMultiplayerHandlers();
+      this.hidePanel();
+    });
+  }
+
+  private async fetchRoomList(): Promise<void> {
+    const listEl = document.getElementById('room-list');
+    if (!listEl) return;
+
+    try {
+      // Try to fetch room list via HTTP API
+      const loc = window.location;
+      const baseUrl = (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1')
+        ? 'http://localhost:8080'
+        : `${loc.protocol}//${loc.host}`;
+      const resp = await fetch(`${baseUrl}/rooms`);
+      const rooms = await resp.json();
+
+      if (rooms.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;font-size:13px;">No rooms available. Create one!</p>';
+      } else {
+        listEl.innerHTML = rooms.map((r: any) => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;margin-bottom:6px;background:rgba(30,25,18,0.7);border:1px solid var(--border);border-radius:6px;">
+            <div>
+              <span style="color:var(--gold);font-weight:600;">${r.host}'s Room</span>
+              <span style="color:var(--text-dim);font-size:11px;margin-left:8px;">${r.mapType} · ${r.players}/${r.maxPlayers} players</span>
+              ${r.started ? '<span style="color:#e74c3c;font-size:11px;margin-left:8px;">In Progress</span>' : ''}
+            </div>
+            ${!r.started ? `<button class="menu-btn primary join-room-btn" data-room="${r.id}" style="margin:0;padding:4px 12px;font-size:11px;min-height:28px;">Join</button>` : ''}
+          </div>
+        `).join('');
+
+        // Attach join handlers
+        listEl.querySelectorAll('.join-room-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const roomId = (btn as HTMLElement).dataset.room;
+            if (roomId) {
+              this.game.networkClient?.joinRoom(roomId);
+            }
+          });
+        });
+      }
+    } catch {
+      listEl.innerHTML = '<p style="color:var(--text-dim);text-align:center;font-size:13px;">Could not fetch rooms</p>';
+    }
+  }
+
+  private showCreateRoom(): void {
+    this.showPanel(`
+      <div style="background:rgba(15,12,8,0.6);border:1px solid var(--border);border-radius:8px;padding:20px;text-align:left;">
+        <h2 style="font-family:'Cinzel',Georgia,serif;color:var(--gold);font-size:1.5rem;margin-bottom:16px;text-align:center;">➕ Create Room</h2>
+
+        <div class="setup-row">
+          <label class="setup-label">Map Type</label>
+          <select id="mp-map" class="setup-select">
+            <option value="arabia">Arabia</option>
+            <option value="islands">Islands</option>
+            <option value="blackForest">Black Forest</option>
+            <option value="coastal">Coastal</option>
+            <option value="arena">Arena</option>
+          </select>
+        </div>
+        <div class="setup-row">
+          <label class="setup-label">Map Size</label>
+          <select id="mp-size" class="setup-select">
+            <option value="tiny">Tiny (120x120)</option>
+            <option value="small" selected>Small (144x144)</option>
+            <option value="medium">Medium (200x200)</option>
+            <option value="large">Large (240x240)</option>
+          </select>
+        </div>
+        <div class="setup-row">
+          <label class="setup-label">Max Players</label>
+          <select id="mp-maxplayers" class="setup-select">
+            <option value="2" selected>2</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:16px;">
+          <button id="btn-do-create" class="menu-btn primary" style="margin:0;">🏰 Create</button>
+          <button id="btn-back-create" class="menu-btn secondary" style="margin:0;">◀️ Back</button>
+        </div>
+      </div>
+    `);
+
+    document.getElementById('btn-do-create')?.addEventListener('click', () => {
+      const mapType = (document.getElementById('mp-map') as HTMLSelectElement)?.value ?? 'arabia';
+      const mapSize = (document.getElementById('mp-size') as HTMLSelectElement)?.value ?? 'small';
+      const maxPlayers = parseInt((document.getElementById('mp-maxplayers') as HTMLSelectElement)?.value ?? '2');
+
+      this.game.networkClient?.createRoom({ mapType, mapSize, maxPlayers, populationLimit: 200 });
+    });
+
+    document.getElementById('btn-back-create')?.addEventListener('click', () => this.showLobbyBrowser());
+  }
+
+  private showGameRoom(): void {
+    const hostLabel = this.mpIsHost ? ' (Host)' : '';
+    const playerListHtml = this.mpPlayers.map(p => {
+      const readyIcon = p.ready ? '✅' : '⏳';
+      const colors = ['#3498db', '#e74c3c', '#f1c40f', '#2ecc71', '#9b59b6', '#e67e22', '#1abc9c', '#ecf0f1'];
+      const color = colors[p.color % colors.length];
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;margin-bottom:4px;background:rgba(30,25,18,0.6);border-radius:4px;">
+        <span style="width:12px;height:12px;border-radius:50%;background:${color};display:inline-block;"></span>
+        <span style="color:var(--text);flex:1;">${p.name}</span>
+        <span>${readyIcon}</span>
+      </div>`;
+    }).join('');
+
+    this.showPanel(`
+      <div style="background:rgba(15,12,8,0.6);border:1px solid var(--border);border-radius:8px;padding:20px;text-align:left;">
+        <h2 style="font-family:'Cinzel',Georgia,serif;color:var(--gold);font-size:1.5rem;margin-bottom:4px;text-align:center;">🏰 Game Room</h2>
+        <p style="color:var(--text-dim);font-size:12px;text-align:center;margin-bottom:12px;">Room: ${this.mpRoomId}${hostLabel}</p>
+
+        <div style="margin-bottom:16px;">
+          <h3 style="color:var(--gold);font-size:13px;margin-bottom:8px;">Players (${this.mpPlayers.length})</h3>
+          <div id="mp-player-list">${playerListHtml}</div>
+        </div>
+
+        <div style="display:flex;gap:12px;justify-content:center;">
+          <button id="btn-ready" class="menu-btn primary" style="margin:0;">✋ Ready</button>
+          ${this.mpIsHost ? '<button id="btn-start-mp" class="menu-btn primary" style="margin:0;border-color:#27ae60;">⚔️ Start Game</button>' : ''}
+          <button id="btn-leave-room" class="menu-btn secondary" style="margin:0;">◀️ Leave</button>
+        </div>
+
+        <div id="mp-room-status" style="color:var(--text-dim);font-size:12px;margin-top:10px;text-align:center;"></div>
+      </div>
+    `);
+
+    let isReady = false;
+    document.getElementById('btn-ready')?.addEventListener('click', () => {
+      isReady = !isReady;
+      this.game.networkClient?.setReady(isReady);
+      const btn = document.getElementById('btn-ready');
+      if (btn) {
+        btn.textContent = isReady ? '✅ Ready!' : '✋ Ready';
+        btn.style.borderColor = isReady ? '#27ae60' : '';
+      }
+    });
+
+    document.getElementById('btn-start-mp')?.addEventListener('click', () => {
+      this.game.networkClient?.startMultiplayerGame();
+      const status = document.getElementById('mp-room-status');
+      if (status) { status.textContent = '⚔️ Starting game...'; status.style.color = '#f4d03f'; }
+    });
+
+    document.getElementById('btn-leave-room')?.addEventListener('click', () => {
+      this.game.networkClient?.leaveRoom();
+      this.mpRoomId = null;
+      this.mpPlayers = [];
+      this.mpIsHost = false;
+      this.showLobbyBrowser();
+    });
+  }
+
+  private registerMultiplayerHandlers(): void {
+    const nc = this.game.networkClient;
+    if (!nc) return;
+
+    // Handle room created
+    nc.on(MessageType.CreateLobby, (msg: any) => {
+      const p = msg.payload;
+      if (p?.success && p?.roomId) {
+        this.mpRoomId = p.roomId;
+        this.mpIsHost = true;
+        this.mpPlayers = [{
+          id: nc.playerId,
+          name: localStorage.getItem('empires-player-name') || 'Player',
+          ready: false,
+          color: 0,
+        }];
+        this.showGameRoom();
+      }
+    });
+
+    // Handle room joined
+    nc.on(MessageType.JoinLobby, (msg: any) => {
+      const p = msg.payload;
+      if (p?.success && p?.roomId) {
+        this.mpRoomId = p.roomId;
+        this.mpIsHost = false;
+        this.mpPlayers = (p.players ?? []).map((pl: any) => ({
+          id: pl.id,
+          name: pl.name,
+          ready: pl.ready ?? false,
+          color: pl.color ?? 0,
+        }));
+        this.showGameRoom();
+      }
+    });
+
+    // Handle player joined
+    nc.on(MessageType.PlayerJoined, (msg: any) => {
+      const p = msg.payload;
+      if (p && this.mpRoomId) {
+        this.mpPlayers.push({ id: p.playerId, name: p.name, ready: false, color: p.color ?? this.mpPlayers.length });
+        this.showGameRoom(); // Re-render
+      }
+    });
+
+    // Handle player left
+    nc.on(MessageType.PlayerLeft, (msg: any) => {
+      const p = msg.payload;
+      if (p && this.mpRoomId) {
+        this.mpPlayers = this.mpPlayers.filter(pl => pl.id !== p.playerId);
+        this.showGameRoom(); // Re-render
+      }
+    });
+
+    // Handle ready state
+    nc.on(MessageType.SetReady, (msg: any) => {
+      const p = msg.payload;
+      if (p && this.mpRoomId) {
+        const player = this.mpPlayers.find(pl => pl.id === p.playerId);
+        if (player) player.ready = p.ready;
+        // Update player list display
+        this.showGameRoom();
+      }
+    });
+
+    // Handle game start
+    nc.on(MessageType.StartGame, (msg: any) => {
+      const p = msg.payload;
+      if (p) {
+        this.cleanupMultiplayerHandlers();
+        this.startMultiplayerGame(p);
+      }
+    });
+  }
+
+  private cleanupMultiplayerHandlers(): void {
+    if (this.mpRefreshTimer) {
+      clearInterval(this.mpRefreshTimer);
+      this.mpRefreshTimer = null;
+    }
+  }
+
+  private startMultiplayerGame(serverPayload: any): void {
+    const mapType = (serverPayload.mapType ?? 'arabia') as MapType;
+    const mapSize = serverPayload.mapSize ?? 'small';
+    const mapDims = MAP_SIZES[mapSize] ?? MAP_SIZES.small;
+    const seed = serverPayload.seed ?? Date.now();
+    const players = serverPayload.players ?? [];
+    const numPlayers = players.length || 2;
+    const populationLimit = serverPayload.populationLimit ?? 200;
+
+    // Find local player's civ (default random)
+    const localId = this.game.networkClient?.playerId;
+    const localPlayer = players.find((p: any) => p.id === localId);
+    const civKeys = Object.keys(CIVILIZATIONS);
+    const playerCiv = localPlayer?.civilization && localPlayer.civilization !== 'random'
+      ? localPlayer.civilization
+      : civKeys[Math.floor(Math.random() * civKeys.length)];
+
+    this.showGame();
+    this.game.startGame({
+      mapType,
+      mapWidth: mapDims.width,
+      mapHeight: mapDims.height,
+      numPlayers,
+      playerCiv,
+      difficulty: 'moderate',
+      startingResources: 'standard',
+      populationLimit,
+      isMultiplayer: true,
+      seed,
+    });
   }
 
   private showMapEditor(): void {
@@ -736,6 +1049,7 @@ export class MenuManager {
           buildings: p.buildings,
         })),
         entities: this.game.entityManager.serialize(),
+        fogOfWar: this.game.fogOfWar.serialize(),
         map: {
           width: (this.game.state.map as any).width,
           height: (this.game.state.map as any).height,

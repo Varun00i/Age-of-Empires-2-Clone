@@ -134,6 +134,29 @@ export class FogOfWar {
     if (exp) exp.fill(1);
   }
 
+  // Serialize explored tiles for save/load
+  serialize(): any {
+    const data: Record<number, number[]> = {};
+    for (const [playerId, exp] of this.explored) {
+      data[playerId] = Array.from(exp);
+    }
+    return data;
+  }
+
+  // Restore explored tiles from save
+  deserialize(data: any): void {
+    if (!data) return;
+    for (const [playerIdStr, arr] of Object.entries(data)) {
+      const playerId = parseInt(playerIdStr);
+      const exp = this.explored.get(playerId);
+      if (exp && Array.isArray(arr)) {
+        for (let i = 0; i < Math.min(exp.length, (arr as number[]).length); i++) {
+          exp[i] = (arr as number[])[i];
+        }
+      }
+    }
+  }
+
   dispose(): void {
     this.visibility.clear();
     this.explored.clear();

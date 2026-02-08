@@ -261,8 +261,8 @@ export class HUDManager {
       // Military unit actions
       this.addActionButton('Stop', '⬜', () => this.game.unitSystem.stopUnit(entityId));
       this.addActionButton('Patrol', '🔄', () => {
-        // Initiate patrol mode
-        this.showNotification('Right-click to set patrol points');
+        // Enter patrol mode - right-click to set destination
+        this.game.input?.enterPatrolMode();
       });
       this.addActionButton('Stand Ground', '🛡️', () => {
         this.game.unitSystem.stopUnit(entityId);
@@ -306,17 +306,41 @@ export class HUDManager {
 
     // Show researchable techs
     if (buildingData.researches) {
-      for (const techId of buildingData.researches.slice(0, 5)) {
-        const player = this.game.state.players.get(this.game.localPlayerId);
+      const player = this.game.state.players.get(this.game.localPlayerId);
+      for (const techId of buildingData.researches) {
+        // Skip already researched
         if (player?.researchedTechs.has(techId)) continue;
 
+        const tech = TECHNOLOGIES[techId] as any;
+        if (!tech) continue;
+
+        // Check prerequisites - skip if prerequisites not met
+        if (tech.prerequisites) {
+          const preReqsMet = tech.prerequisites.every((req: string) => player?.researchedTechs.has(req));
+          if (!preReqsMet) continue;
+        }
+
+        // Check age requirements
+        if (tech.age !== undefined && player) {
+          if (player.age < tech.age) continue;
+        }
+
+        const costStr = Object.entries(tech.cost ?? {})
+          .filter(([, v]) => ((v as any) ?? 0) > 0)
+          .map(([r, v]) => `${v} ${r}`)
+          .join(', ');
+
+        const isAgeUp = ['feudalAge', 'castleAge', 'imperialAge'].includes(techId);
+        const emoji = isAgeUp ? '🏛️' : '📜';
+
         this.addActionButton(
-          techId.substring(0, 10),
-          '📜',
+          (tech.name ?? techId).substring(0, 12),
+          emoji,
           () => {
             this.game.buildingSystem.research(entityId, techId, this.game.localPlayerId);
             this.game.audioManager?.play('click');
-          }
+          },
+          costStr ? `${tech.name}\n${costStr}` : tech.name
         );
       }
     }
@@ -346,20 +370,22 @@ export class HUDManager {
   private addActionButton(label: string, emoji: string, onClick: () => void, tooltip?: string): void {
     const btn = document.createElement('button');
     btn.className = 'action-btn';
-    btn.innerHTML = `<span style="font-size:16px;">${emoji}</span><br><span style="font-size:9px;">${label}</span>`;
+    btn.innerHTML = `<span style="font-size:14px;">${emoji}</span><br><span style="font-size:8px;">${label}</span>`;
     btn.title = tooltip ?? label;
     btn.style.cssText = `
       background: #3a3020;
       border: 1px solid #5a4a30;
       color: #e8d5a3;
       cursor: pointer;
-      padding: 4px 2px;
-      border-radius: 4px;
+      padding: 2px 1px;
+      border-radius: 3px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 40px;
+      min-height: 32px;
+      max-height: 38px;
+      font-size: 9px;
       transition: background 0.15s;
     `;
     btn.addEventListener('mouseenter', () => { btn.style.background = '#4a4030'; });

@@ -1174,6 +1174,9 @@ export class Renderer {
 
     // Render debug info
     this.renderDebugInfo();
+
+    // Render hover tooltip
+    this.renderHoverTooltip();
   }
 
   private renderTerrain(): void {
@@ -1295,8 +1298,8 @@ export class Renderer {
         const screenY = (x + y) * (this.ISO_H / 2);
         const rng = this.tileHash(x, y);
 
-        // ~30% of tiles get a decoration
-        if (rng > 0.3) continue;
+        // ~8% of tiles get a decoration (subtle, not "bulb" like)
+        if (rng > 0.08) continue;
 
         const decType = this.tileHash(x, y, 1);
         const offsetX = (this.tileHash(x, y, 2) - 0.5) * 16;
@@ -1307,56 +1310,29 @@ export class Renderer {
         ctx.globalAlpha = fogState === 1 ? 0.4 : 1;
 
         if (terrain === TerrainType.Grass) {
-          if (decType < 0.25) {
-            // Flower cluster
-            const colors = ['#e74c3c', '#f1c40f', '#e67e22', '#9b59b6', '#3498db', '#ffffff'];
-            const flowerColor = colors[Math.floor(this.tileHash(x, y, 4) * colors.length)];
-            // Stem
-            ctx.strokeStyle = '#2d5a1e';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(dx, dy); ctx.lineTo(dx, dy - 4);
-            ctx.stroke();
-            // Petal
-            ctx.fillStyle = flowerColor;
-            ctx.beginPath();
-            ctx.arc(dx, dy - 5, 2, 0, Math.PI * 2);
-            ctx.fill();
-            // Center
-            ctx.fillStyle = '#f4d03f';
-            ctx.beginPath();
-            ctx.arc(dx, dy - 5, 0.8, 0, Math.PI * 2);
-            ctx.fill();
-          } else if (decType < 0.5) {
-            // Grass tuft
+          if (decType < 0.4) {
+            // Grass tuft (subtle, no bright colors)
             ctx.strokeStyle = '#5a9a3a';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(dx - 2, dy); ctx.lineTo(dx - 3, dy - 5);
-            ctx.moveTo(dx, dy); ctx.lineTo(dx, dy - 6);
-            ctx.moveTo(dx + 2, dy); ctx.lineTo(dx + 3, dy - 5);
+            ctx.moveTo(dx - 2, dy); ctx.lineTo(dx - 3, dy - 4);
+            ctx.moveTo(dx, dy); ctx.lineTo(dx, dy - 5);
+            ctx.moveTo(dx + 2, dy); ctx.lineTo(dx + 3, dy - 4);
             ctx.stroke();
           } else if (decType < 0.7) {
-            // Small mushroom
-            ctx.fillStyle = '#8b6b4a';
-            ctx.fillRect(dx - 0.5, dy - 2, 1.5, 3);
-            ctx.fillStyle = '#c0392b';
-            ctx.beginPath();
-            ctx.arc(dx, dy - 3, 2.5, Math.PI, 0);
-            ctx.fill();
-            // White dots
-            ctx.fillStyle = '#fff';
-            ctx.beginPath();
-            ctx.arc(dx - 1, dy - 3.5, 0.5, 0, Math.PI * 2);
-            ctx.arc(dx + 1, dy - 3, 0.5, 0, Math.PI * 2);
-            ctx.fill();
-          } else {
             // Small pebbles  
             ctx.fillStyle = '#7f8c8d';
             ctx.beginPath();
-            ctx.arc(dx - 1, dy, 1.5, 0, Math.PI * 2);
-            ctx.arc(dx + 2, dy + 1, 1, 0, Math.PI * 2);
+            ctx.arc(dx - 1, dy, 1.2, 0, Math.PI * 2);
+            ctx.arc(dx + 2, dy + 1, 0.8, 0, Math.PI * 2);
             ctx.fill();
+          } else {
+            // Dry leaf / twig
+            ctx.strokeStyle = '#6b5535';
+            ctx.lineWidth = 0.7;
+            ctx.beginPath();
+            ctx.moveTo(dx - 2, dy); ctx.lineTo(dx + 2, dy - 1);
+            ctx.stroke();
           }
         } else if (terrain === TerrainType.Dirt) {
           if (decType < 0.4) {
@@ -1604,10 +1580,12 @@ export class Renderer {
       const playerColor = this.getPlayerColorHex(entity.owner);
 
       // Draw building sprite
+      const buildProgress = this.game.entityManager.getBuildProgress(entity.id);
+      const isUnderConstruction = buildProgress !== undefined && buildProgress < 1;
       const sprite = this.buildingSprites.get(stats.id);
       if (sprite) {
         this.ctx.save();
-        this.ctx.globalAlpha = fogState === 1 ? 0.6 : 1.0;
+        this.ctx.globalAlpha = fogState === 1 ? 0.6 : isUnderConstruction ? 0.4 + buildProgress! * 0.6 : 1.0;
         this.ctx.drawImage(sprite, screenX - sprite.width / 2, screenY - sprite.height / 2);
 
         // Color overlay
@@ -1618,18 +1596,42 @@ export class Renderer {
       } else {
         // Procedural building based on type
         const size = (stats.size?.x ?? 2) * 12;
-        this.ctx.globalAlpha = fogState === 1 ? 0.6 : 1.0;
+        this.ctx.globalAlpha = fogState === 1 ? 0.6 : isUnderConstruction ? 0.4 + buildProgress! * 0.6 : 1.0;
         this.drawProceduralBuilding(screenX, screenY, size, stats.id, playerColor);
         this.ctx.globalAlpha = 1;
       }
 
       // Construction progress bar
-      const buildProgress = this.game.entityManager.getBuildProgress(entity.id);
-      if (buildProgress !== undefined && buildProgress < 1) {
+      if (isUnderConstruction) {
+        // Scaffolding effect during construction
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.4;
+        this.ctx.strokeStyle = '#8b6914';
+        this.ctx.lineWidth = 1;
+        const scaffoldSize = (stats.size?.x ?? 2) * 8;
+        // Vertical beams
+        this.ctx.beginPath();
+        this.ctx.moveTo(screenX - scaffoldSize, screenY - 2); this.ctx.lineTo(screenX - scaffoldSize, screenY - 20);
+        this.ctx.moveTo(screenX + scaffoldSize, screenY - 2); this.ctx.lineTo(screenX + scaffoldSize, screenY - 20);
+        this.ctx.stroke();
+        // Horizontal beam
+        this.ctx.beginPath();
+        this.ctx.moveTo(screenX - scaffoldSize, screenY - 12 * buildProgress - 6);
+        this.ctx.lineTo(screenX + scaffoldSize, screenY - 12 * buildProgress - 6);
+        this.ctx.stroke();
+        this.ctx.restore();
+
+        // Progress bar
         this.ctx.fillStyle = '#333';
         this.ctx.fillRect(screenX - 15, screenY + 8, 30, 4);
         this.ctx.fillStyle = '#f39c12';
         this.ctx.fillRect(screenX - 15, screenY + 8, 30 * buildProgress, 4);
+        // Percentage text
+        this.ctx.font = 'bold 9px sans-serif';
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(`${Math.floor(buildProgress * 100)}%`, screenX, screenY + 20);
+        this.ctx.textAlign = 'left';
       }
 
       // HP bar for damaged buildings
@@ -1642,6 +1644,49 @@ export class Renderer {
         this.ctx.fillRect(screenX - barWidth / 2, screenY - 20, barWidth, 3);
         this.ctx.fillStyle = hpRatio > 0.6 ? '#27ae60' : hpRatio > 0.3 ? '#f39c12' : '#e74c3c';
         this.ctx.fillRect(screenX - barWidth / 2, screenY - 20, barWidth * hpRatio, 3);
+
+        // Smoke effect for heavily damaged buildings
+        if (hpRatio < 0.4 && Math.random() < 0.05) {
+          this.spawnParticles(pos.x, pos.y, 'smoke', 1);
+        }
+      }
+
+      // Training progress bar (if training queue active)
+      const buildComp = this.game.entityManager.getBuildingComponent(entity.id);
+      if (buildComp && buildComp.isComplete && buildComp.trainingQueue.length > 0) {
+        const current = buildComp.trainingQueue[0];
+        const trainProgress = current.progress / current.totalTime;
+        const barWidth = 24;
+        this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        this.ctx.fillRect(screenX - barWidth / 2, screenY + 14, barWidth, 3);
+        this.ctx.fillStyle = '#3498db';
+        this.ctx.fillRect(screenX - barWidth / 2, screenY + 14, barWidth * trainProgress, 3);
+      }
+
+      // Building name label (small, stylish)
+      if (fogState === 2 && this.camera.zoom >= 0.6) {
+        this.ctx.save();
+        this.ctx.font = 'bold 8px sans-serif';
+        this.ctx.textAlign = 'center';
+        const labelY = screenY - (stats.size?.x ?? 2) * 8 - 4;
+        // Shadow for readability
+        this.ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        const labelText = stats.name;
+        const tw = this.ctx.measureText(labelText).width;
+        this.ctx.fillRect(screenX - tw / 2 - 3, labelY - 8, tw + 6, 11);
+        this.ctx.fillStyle = '#e8d5a3';
+        this.ctx.fillText(labelText, screenX, labelY);
+        this.ctx.restore();
+      }
+
+      // Selection ring for buildings
+      if (this.game.selectedEntities.includes(entity.id)) {
+        const selSize = (stats.size?.x ?? 2) * 8;
+        this.ctx.strokeStyle = '#00ff88';
+        this.ctx.lineWidth = 1.5;
+        this.ctx.beginPath();
+        this.ctx.ellipse(screenX, screenY + 2, selSize, selSize / 2, 0, 0, Math.PI * 2);
+        this.ctx.stroke();
       }
     }
   }
@@ -1831,6 +1876,28 @@ export class Renderer {
       const state = this.game.entityManager.getUnitState(entity.id);
       const unitComp = this.game.entityManager.getUnitComponent(entity.id);
 
+      // Skip dead units that have been removed
+      if (state === 'dead') {
+        // Death animation: fall over and fade out
+        const hp = this.game.entityManager.getHP(entity.id) ?? 0;
+        const deathProgress = Math.min(1, (this.animTime % 100000) * 0.001); // approximate
+        this.ctx.save();
+        this.ctx.globalAlpha = Math.max(0.1, 1 - deathProgress * 0.6);
+        this.ctx.translate(screenX, screenY - 4);
+        this.ctx.rotate(Math.PI / 2 * Math.min(1, deathProgress * 2)); // Fall sideways
+        this.ctx.fillStyle = '#8b0000';
+        this.ctx.beginPath();
+        this.ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.restore();
+        // Blood pool
+        this.ctx.fillStyle = 'rgba(139, 0, 0, 0.3)';
+        this.ctx.beginPath();
+        this.ctx.ellipse(screenX, screenY + 2, 6, 3, 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        continue;
+      }
+
       // Animation offsets based on state
       let bobY = 0;
       let scaleX = 1;
@@ -1910,6 +1977,19 @@ export class Renderer {
         this.ctx.beginPath();
         this.ctx.ellipse(screenX, screenY + 1, 8, 4, 0, 0, Math.PI * 2);
         this.ctx.stroke();
+      }
+
+      // Carried resource indicator (small icon above head)
+      if (unitComp && unitComp.carryAmount > 0 && unitComp.carryType) {
+        const carryColors: Record<string, string> = { food: '#e74c3c', wood: '#8b6914', gold: '#f4d03f', stone: '#95a5a6' };
+        const carryIcons: Record<string, string> = { food: '●', wood: '■', gold: '◆', stone: '▲' };
+        const cColor = carryColors[unitComp.carryType] ?? '#fff';
+        const cIcon = carryIcons[unitComp.carryType] ?? '●';
+        this.ctx.font = 'bold 7px sans-serif';
+        this.ctx.fillStyle = cColor;
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText(cIcon, screenX + 6, screenY - 16 + bobY);
+        this.ctx.textAlign = 'left';
       }
 
       // Gathering particle effect
@@ -2056,25 +2136,96 @@ export class Renderer {
   }
 
   private renderDebugInfo(): void {
-    // FPS counter at top-right
+    // FPS counter at top-right (positioned below resource bar at 34px)
     this.ctx.save();
-    this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    this.ctx.fillRect(this.width - 130, 8, 122, 50);
-    this.ctx.strokeStyle = '#3a3a3a';
+    this.ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    this.ctx.fillRect(this.width - 140, 40, 132, 52);
+    this.ctx.strokeStyle = '#555';
     this.ctx.lineWidth = 1;
-    this.ctx.strokeRect(this.width - 130, 8, 122, 50);
+    this.ctx.strokeRect(this.width - 140, 40, 132, 52);
 
-    this.ctx.font = 'bold 16px monospace';
+    this.ctx.font = 'bold 18px monospace';
     const fpsColor = this.game.fps >= 50 ? '#00ff66' : this.game.fps >= 30 ? '#ffcc00' : '#ff4444';
     this.ctx.fillStyle = fpsColor;
     this.ctx.textAlign = 'right';
-    this.ctx.fillText(`FPS: ${this.game.fps}`, this.width - 16, 28);
+    this.ctx.fillText(`FPS: ${this.game.fps}`, this.width - 16, 60);
 
     this.ctx.font = '11px monospace';
-    this.ctx.fillStyle = '#aaa';
-    this.ctx.fillText(`Entities: ${this.game.entityManager.getEntityCount()}`, this.width - 16, 42);
-    this.ctx.fillText(`Tick: ${this.game.state?.tick ?? 0}`, this.width - 16, 54);
+    this.ctx.fillStyle = '#bbb';
+    this.ctx.fillText(`Entities: ${this.game.entityManager.getEntityCount()}`, this.width - 16, 74);
+    this.ctx.fillText(`Tick: ${this.game.state?.tick ?? 0}`, this.width - 16, 86);
     this.ctx.textAlign = 'left';
+    this.ctx.restore();
+  }
+
+  private renderHoverTooltip(): void {
+    const hoveredId = this.game.input?.getHoveredEntity();
+    if (hoveredId === null || hoveredId === undefined) return;
+    // Don't show tooltip for selected entities (already shown in HUD)
+    if (this.game.selectedEntities.includes(hoveredId)) return;
+
+    const em = this.game.entityManager;
+    const pos = em.getPosition(hoveredId);
+    if (!pos) return;
+
+    const mouse = this.game.input?.getMouseScreen();
+    if (!mouse) return;
+
+    const unitData = em.getUnitData(hoveredId);
+    const buildingData = em.getBuildingData(hoveredId);
+    const resourceData = em.getResourceComponent(hoveredId);
+
+    let name = '';
+    let details = '';
+    const hp = em.getHP(hoveredId);
+    const maxHP = em.getMaxHP(hoveredId);
+
+    if (unitData) {
+      name = unitData.name;
+      details = `HP: ${hp}/${maxHP}  ATK: ${unitData.attack}`;
+    } else if (buildingData) {
+      name = buildingData.name;
+      const building = em.getBuildingComponent(hoveredId);
+      if (building && !building.isComplete) {
+        details = `Building: ${Math.floor(building.buildProgress * 100)}%`;
+      } else {
+        details = `HP: ${hp}/${maxHP}`;
+      }
+    } else if (resourceData) {
+      const resNames: Record<string, string> = { food: 'Food', wood: 'Wood', gold: 'Gold', stone: 'Stone' };
+      name = resNames[resourceData.resourceType] ?? resourceData.resourceType;
+      details = `Amount: ${resourceData.amount}`;
+    } else {
+      return;
+    }
+
+    // Draw tooltip near mouse
+    this.ctx.save();
+    this.ctx.font = 'bold 11px sans-serif';
+    const nameWidth = this.ctx.measureText(name).width;
+    this.ctx.font = '10px sans-serif';
+    const detailsWidth = this.ctx.measureText(details).width;
+    const boxW = Math.max(nameWidth, detailsWidth) + 16;
+    const boxH = details ? 34 : 20;
+    const tx = Math.min(mouse.x + 12, this.width - boxW - 4);
+    const ty = Math.max(mouse.y - boxH - 8, 4);
+
+    this.ctx.fillStyle = 'rgba(20, 15, 10, 0.85)';
+    this.ctx.strokeStyle = '#5a4a30';
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.roundRect(tx, ty, boxW, boxH, 4);
+    this.ctx.fill();
+    this.ctx.stroke();
+
+    this.ctx.font = 'bold 11px sans-serif';
+    this.ctx.fillStyle = '#f4d03f';
+    this.ctx.fillText(name, tx + 8, ty + 14);
+    if (details) {
+      this.ctx.font = '10px sans-serif';
+      this.ctx.fillStyle = '#bbb';
+      this.ctx.fillText(details, tx + 8, ty + 28);
+    }
     this.ctx.restore();
   }
 

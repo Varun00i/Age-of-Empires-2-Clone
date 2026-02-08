@@ -40,6 +40,27 @@ export class BuildingSystem {
 
     const size = data.size ?? { x: 2, y: 2 };
 
+    // Dock must be placed adjacent to water
+    if (buildingId === 'dock') {
+      let hasAdjacentWater = false;
+      for (let dy = -1; dy <= size.y; dy++) {
+        for (let dx = -1; dx <= size.x; dx++) {
+          if (dx >= 0 && dx < size.x && dy >= 0 && dy < size.y) continue; // Skip the building tiles themselves
+          const tx = x + dx;
+          const ty = y + dy;
+          if (tx >= 0 && tx < map.width && ty >= 0 && ty < map.height) {
+            const tile = map.tiles[ty]?.[tx];
+            if (tile && (tile.terrain === 6 || tile.terrain === 7 || tile.terrain === 8)) { // Water/DeepWater/ShallowWater
+              hasAdjacentWater = true;
+              break;
+            }
+          }
+        }
+        if (hasAdjacentWater) break;
+      }
+      if (!hasAdjacentWater) return false;
+    }
+
     // Check tiles
     for (let dy = 0; dy < size.y; dy++) {
       for (let dx = 0; dx < size.x; dx++) {

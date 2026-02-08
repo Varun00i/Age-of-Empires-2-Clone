@@ -91,12 +91,12 @@ export class MapGenerator {
     // Open map with scattered forests and hills
     this.applyPerlinTerrain(tiles, w, h);
 
-    // Add scattered forests (10-15% coverage)
-    for (let i = 0; i < w * h * 0.12; i++) {
+    // Add scattered forests (10-15% coverage) - larger clumps of 10-30 trees
+    for (let i = 0; i < w * h * 0.04; i++) {
       const x = this.rng.nextInt(0, w - 1);
       const y = this.rng.nextInt(0, h - 1);
       if (tiles[y][x].terrain === TerrainType.Grass) {
-        this.placeForestClump(tiles, x, y, w, h, this.rng.nextInt(3, 12));
+        this.placeForestClump(tiles, x, y, w, h, this.rng.nextInt(10, 30));
       }
     }
 
@@ -333,16 +333,27 @@ export class MapGenerator {
   }
 
   private placeForestClump(tiles: MapTile[][], cx: number, cy: number, w: number, h: number, size: number): void {
+    // Use random walk + radius for natural-looking clusters
+    const placed: Set<string> = new Set();
+    let px = cx, py = cy;
     for (let i = 0; i < size; i++) {
-      const x = cx + this.rng.nextInt(-3, 3);
-      const y = cy + this.rng.nextInt(-3, 3);
+      // Random walk from center for organic shape
+      const x = px + this.rng.nextInt(-1, 1);
+      const y = py + this.rng.nextInt(-1, 1);
       if (x >= 0 && x < w && y >= 0 && y < h && tiles[y][x].terrain === TerrainType.Grass) {
-        tiles[y][x].terrain = TerrainType.Forest;
-        tiles[y][x].resourceType = 'wood' as ResourceType;
-        tiles[y][x].resourceAmount = 100;
-        tiles[y][x].walkable = false;
-        tiles[y][x].buildable = false;
+        const key = `${x},${y}`;
+        if (!placed.has(key)) {
+          tiles[y][x].terrain = TerrainType.Forest;
+          tiles[y][x].resourceType = 'wood' as ResourceType;
+          tiles[y][x].resourceAmount = 100;
+          tiles[y][x].walkable = false;
+          tiles[y][x].buildable = false;
+          placed.add(key);
+        }
       }
+      // Drift the walker
+      px = x;
+      py = y;
     }
   }
 
@@ -568,18 +579,39 @@ export class MapGenerator {
   }
 
   private placeScatteredResources(tiles: MapTile[][], w: number, h: number): void {
-    // Extra gold mines
+    // Extra gold mines (3-5 tiles each)
     for (let i = 0; i < 8; i++) {
       const x = this.rng.nextInt(10, w - 10);
       const y = this.rng.nextInt(10, h - 10);
       this.placeResourceCluster(tiles, x, y, w, h, 'gold' as ResourceType, 800, this.rng.nextInt(3, 5));
     }
 
-    // Extra stone quarries
+    // Extra stone quarries (3-5 tiles each)
     for (let i = 0; i < 6; i++) {
       const x = this.rng.nextInt(10, w - 10);
       const y = this.rng.nextInt(10, h - 10);
       this.placeResourceCluster(tiles, x, y, w, h, 'stone' as ResourceType, 350, this.rng.nextInt(3, 5));
+    }
+
+    // Scattered deer herds (3-4 deer per herd)
+    for (let i = 0; i < 6; i++) {
+      const x = this.rng.nextInt(15, w - 15);
+      const y = this.rng.nextInt(15, h - 15);
+      this.placeResourceCluster(tiles, x, y, w, h, 'food' as ResourceType, 140, this.rng.nextInt(3, 4));
+    }
+
+    // Scattered boar (1-2 per location)
+    for (let i = 0; i < 4; i++) {
+      const x = this.rng.nextInt(15, w - 15);
+      const y = this.rng.nextInt(15, h - 15);
+      this.placeResourceCluster(tiles, x, y, w, h, 'food' as ResourceType, 340, 1);
+    }
+
+    // Extra berry bushes (3-5 per cluster)
+    for (let i = 0; i < 4; i++) {
+      const x = this.rng.nextInt(10, w - 10);
+      const y = this.rng.nextInt(10, h - 10);
+      this.placeResourceCluster(tiles, x, y, w, h, 'food' as ResourceType, 125, this.rng.nextInt(3, 5));
     }
   }
 

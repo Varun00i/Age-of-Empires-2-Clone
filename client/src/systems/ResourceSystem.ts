@@ -202,6 +202,40 @@ export class ResourceSystem {
     const tech = TECHNOLOGIES[techId];
     if (!tech) return;
 
+    // Handle age advancement
+    if (techId === 'feudalAge') {
+      const player = this.game.state.players.get(playerId);
+      if (player) {
+        player.age = Age.Feudal;
+        this.game.hudManager?.showNotification('🏛️ Feudal Age reached!', '#f4d03f');
+        // Celebration particles at all TCs
+        for (const b of this.game.entityManager.getBuildingsByType('townCenter', playerId)) {
+          const pos = this.game.entityManager.getPosition(b);
+          if (pos) this.game.renderer.spawnParticles(pos.x, pos.y, 'gold', 15);
+        }
+      }
+    } else if (techId === 'castleAge') {
+      const player = this.game.state.players.get(playerId);
+      if (player) {
+        player.age = Age.Castle;
+        this.game.hudManager?.showNotification('🏰 Castle Age reached!', '#f4d03f');
+        for (const b of this.game.entityManager.getBuildingsByType('townCenter', playerId)) {
+          const pos = this.game.entityManager.getPosition(b);
+          if (pos) this.game.renderer.spawnParticles(pos.x, pos.y, 'gold', 20);
+        }
+      }
+    } else if (techId === 'imperialAge') {
+      const player = this.game.state.players.get(playerId);
+      if (player) {
+        player.age = Age.Imperial;
+        this.game.hudManager?.showNotification('👑 Imperial Age reached!', '#f4d03f');
+        for (const b of this.game.entityManager.getBuildingsByType('townCenter', playerId)) {
+          const pos = this.game.entityManager.getPosition(b);
+          if (pos) this.game.renderer.spawnParticles(pos.x, pos.y, 'gold', 25);
+        }
+      }
+    }
+
     for (const effect of tech.effects) {
       switch (effect.type) {
         case 'resource_bonus':

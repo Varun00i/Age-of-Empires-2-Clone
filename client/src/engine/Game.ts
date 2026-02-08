@@ -267,6 +267,11 @@ export class Game {
     const playerIds = Array.from(this.state.players.keys()) as number[];
     this.fogOfWar.init(save.map.width, save.map.height, playerIds);
 
+    // Restore fog of war explored tiles from save
+    if (save.fogOfWar) {
+      this.fogOfWar.deserialize(save.fogOfWar);
+    }
+
     // Initialize resource system
     this.resourceSystem.init(playerIds);
 
@@ -439,7 +444,16 @@ export class Game {
         break;
       case CommandType.Build:
         if (cmd.entityIds && cmd.buildingType && cmd.position) {
-          this.buildingSystem.placeBuilding(cmd.buildingType, cmd.position.x, cmd.position.y, cmd.playerId);
+          const buildingId = this.buildingSystem.placeBuilding(cmd.buildingType, cmd.position.x, cmd.position.y, cmd.playerId);
+          // Auto-send selected villagers to construct the building
+          if (buildingId !== null && cmd.entityIds.length > 0) {
+            for (const eid of cmd.entityIds) {
+              const unitData = this.entityManager.getUnitData(eid);
+              if (unitData?.id === 'villager') {
+                this.unitSystem.buildStructure(eid, buildingId);
+              }
+            }
+          }
         }
         break;
       case CommandType.Train:

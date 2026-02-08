@@ -122,11 +122,22 @@ export class CombatSystem {
       this.game.audioManager?.playPositional('death', victimPos.x, victimPos.y);
     }
 
-    // Remove victim
-    if (em.isBuilding(victimId)) {
-      this.game.buildingSystem.deleteBuilding(victimId);
+    // For units, set dead state for death animation instead of immediate removal
+    if (em.isUnit(victimId)) {
+      em.setUnitState(victimId, 'dead');
+      // Schedule removal after death animation (1.5 seconds)
+      setTimeout(() => {
+        if (em.entityExists(victimId)) {
+          em.removeEntity(victimId);
+        }
+      }, 1500);
     } else {
-      em.removeEntity(victimId);
+      // Buildings removed immediately
+      if (em.isBuilding(victimId)) {
+        this.game.buildingSystem.deleteBuilding(victimId);
+      } else {
+        em.removeEntity(victimId);
+      }
     }
 
     // Update killer score / bounty

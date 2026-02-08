@@ -53,7 +53,7 @@ export class UnitSystem {
     const map = this.game.state.map;
     if (!map) return;
 
-    // Find path using A*
+    // Find path using A* - pathfinding works through unexplored/fog areas
     const walkable = (x: number, y: number) => {
       if (x < 0 || x >= map.width || y < 0 || y >= map.height) return false;
       return map.tiles[y]?.[x]?.walkable ?? false;
@@ -147,7 +147,24 @@ export class UnitSystem {
     const moveX = (dx / dist) * Math.min(speed, dist);
     const moveY = (dy / dist) * Math.min(speed, dist);
 
-    em.setPosition(entityId, pos.x + moveX, pos.y + moveY);
+    // Anti-vibration: check if we're actually making progress
+    const newX = pos.x + moveX;
+    const newY = pos.y + moveY;
+    const tileX = Math.floor(newX);
+    const tileY = Math.floor(newY);
+    const map = this.game.state.map;
+    const targetTile = map?.tiles[tileY]?.[tileX];
+
+    // If target tile is not walkable, skip to next waypoint or stop
+    if (targetTile && !targetTile.walkable) {
+      unit.pathIndex++;
+      if (unit.pathIndex >= unit.path.length) {
+        em.setUnitState(entityId, 'idle');
+      }
+      return;
+    }
+
+    em.setPosition(entityId, newX, newY);
     unit.facing = Math.atan2(dy, dx);
   }
 
@@ -376,6 +393,13 @@ export class UnitSystem {
         building.isComplete = true;
         em.setHP(unit.targetId, building.data.hp);
         em.setUnitState(entityId, 'idle');
+        // Building completion flash particles + notification
+        const bPos = em.getPosition(unit.targetId);
+        if (bPos) {
+          this.game.renderer.spawnParticles(bPos.x, bPos.y, 'spark', 8);
+          this.game.renderer.spawnParticles(bPos.x, bPos.y, 'dust', 4);
+        }
+        this.game.hudManager?.showNotification(`${building.data.name} completed!`);
       }
     }
   }
